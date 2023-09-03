@@ -1,16 +1,39 @@
-[build-system]
-requires = ["maturin>=1.2,<2.0"]
-build-backend = "maturin"
-
 [project]
 name = "libipld"
+description = "Python binding to the Rust IPLD library"
+authors = [{ name = "Ilya (Marshal)", email = "ilya@marshal.dev" }]
+license = "MIT"
+repository = "https://github.com/MarshalX/python-libipld"
+readme = "README.md"
+keywords = ["library", "lib", "ipld", "cid", "multibase", "multihash", "dag", "cbor", "json", "pb", "dag-cbor", "dag-json", "dag-pb"]
 requires-python = ">=3.7"
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Pre-processors",
 ]
 
+[project.urls]
+"Author" = "https://github.com/MarshalX"
+"Tracker" = "https://github.com/MarshalX/python-libipld/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[build-system]
+requires = ["maturin>=1.2,<2.0"]
+build-backend = "maturin"
