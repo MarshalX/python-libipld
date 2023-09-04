@@ -3,7 +3,7 @@ use std::collections::{HashMap};
 use std::io::{BufReader, Cursor, Read, Seek};
 use pyo3::prelude::*;
 use pyo3::conversion::ToPyObject;
-use pyo3::{types::PyBool, PyObject, Python};
+use pyo3::{PyObject, Python};
 use tokio;
 use anyhow::Result;
 use iroh_car::CarReader;
@@ -30,10 +30,7 @@ pub enum HashMapItem {
 impl HashMapItem {
     fn value(&self) -> PyObject {
         Python::with_gil(|py| match self {
-            Self::Null => PyBool::new(py, false).to_object(py),
-            // FIXME None type support has been added, but not released yet
-            //  ref: https://github.com/PyO3/pyo3/commit/b3cf61cea6c928ca21d3403a046d3ee7b234abc5
-            //  i guess will be included in the next release
+            Self::Null => py.None(),
             Self::Bool(b) => b.to_object(py),
             Self::String(s) => s.to_object(py),
             Self::Integer(i) => i.to_object(py),
