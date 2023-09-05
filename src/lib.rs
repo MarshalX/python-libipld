@@ -4,10 +4,9 @@ use std::io::{BufReader, Cursor, Read, Seek};
 use pyo3::prelude::*;
 use pyo3::conversion::ToPyObject;
 use pyo3::{PyObject, Python};
-use tokio;
 use anyhow::Result;
 use iroh_car::CarReader;
-use futures::stream::StreamExt;
+use futures::{executor, stream::StreamExt};
 use ::libipld::cbor::cbor::MajorKind;
 use ::libipld::cbor::decode;
 use ::libipld::multihash::{MultihashDigest};
@@ -43,13 +42,13 @@ impl HashMapItem {
 }
 
 impl ToPyObject for HashMapItem {
-    fn to_object(&self, py: Python<'_>) -> PyObject {
+    fn to_object(&self, _: Python<'_>) -> PyObject {
         self.value().into()
     }
 }
 
 impl IntoPy<Py<PyAny>> for HashMapItem {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
+    fn into_py(self, _: Python<'_>) -> Py<PyAny> {
         self.value().into()
     }
 }
@@ -119,10 +118,9 @@ fn _ipld_to_python(ipld: Ipld) -> HashMapItem {
 
 #[pyfunction]
 fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
-    let mut runtime = tokio::runtime::Runtime::new().expect("Unable to create a runtime");
-
-    let car = runtime.block_on(CarReader::new(data.as_slice())).unwrap();
-    let records = runtime.block_on(car
+    let car = executor::block_on(CarReader::new(data.as_slice())).unwrap();
+    // TODO return header to python
+    let records = executor::block_on(car
         .stream()
         .filter_map(|block| async {
             if let Ok((cid, bytes)) = block {
@@ -142,6 +140,7 @@ fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
 
     let mut decoded_records = HashMap::new();
     for (cid, ipld) in &records {
+        // TODO return decoded cid?
         decoded_records.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
     }
 

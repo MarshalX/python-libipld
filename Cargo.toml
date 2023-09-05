@@ -13,9 +13,8 @@ name = "libipld"
 crate-type = ["cdylib"]
 
 [dependencies]
+pyo3 = { version = "0.19", features = ["anyhow"] }
 anyhow = "1.0.75"
 futures = "0.3"
-tokio = { version = "1", features = ["full"] }
-iroh-car = "0.4.0"
 libipld = { version = "0.16.0", features = ["dag-cbor", "dag-json", "dag-pb", "derive"] }
-pyo3 = { version = "0.19", features = ["anyhow"] }
+iroh-car = "0.4.0"
