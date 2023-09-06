@@ -117,7 +117,7 @@ fn parse_dag_cbor_object<R: Read + Seek>(mut reader: &mut BufReader<R>) -> Resul
 }
 
 #[pyfunction]
-fn decode_dag_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
+fn decode_dag_cbor_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
     let mut reader = BufReader::new(Cursor::new(data));
 
     let mut parts = Vec::new();
@@ -132,7 +132,7 @@ fn decode_dag_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
     Ok(parts)
 }
 
-fn _decode_dag(data: Vec<u8>) -> Result<Ipld> {
+fn _decode_dag_cbor(data: Vec<u8>) -> Result<Ipld> {
     let mut reader = BufReader::new(Cursor::new(data));
     parse_dag_cbor_object(&mut reader)
 }
@@ -165,7 +165,6 @@ fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
 
     let mut decoded_records = HashMap::new();
     for (cid, ipld) in &records {
-        // TODO return decoded cid?
         decoded_records.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
     }
 
@@ -173,8 +172,8 @@ fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
 }
 
 #[pyfunction]
-fn decode_dag(data: Vec<u8>) -> PyResult<HashMapItem> {
-    Ok(_ipld_to_python(_decode_dag(data)?))
+fn decode_dag_cbor(data: Vec<u8>) -> PyResult<HashMapItem> {
+    Ok(_ipld_to_python(_decode_dag_cbor(data)?))
 }
 
 #[pyfunction]
@@ -187,7 +186,7 @@ fn decode_cid(data: String) -> PyResult<HashMapItem> {
 fn libipld(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(decode_car, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
     Ok(())
 }
