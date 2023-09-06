@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::conversion::ToPyObject;
 use pyo3::{PyObject, Python};
 use anyhow::Result;
-use iroh_car::CarReader;
+use iroh_car::{CarHeader, CarReader};
 use futures::{executor, stream::StreamExt};
 use ::libipld::cbor::cbor::MajorKind;
 use ::libipld::cbor::decode;
@@ -70,6 +70,51 @@ fn ipld_to_hashmap(x: Ipld) -> HashMapItem {
     }
 }
 
+fn car_header_to_hashmap(header: &CarHeader) -> HashMapItem {
+    HashMapItem::Map(
+        vec![
+            ("version".to_string(), HashMapItem::Integer(header.version() as i128)),
+            (
+                "roots".to_string(),
+                HashMapItem::List(
+                    header
+                        .roots()
+                        .iter()
+                        .map(|cid| HashMapItem::String(cid.to_string()))
+                        .collect(),
+                ),
+            ),
+        ]
+            .into_iter()
+            .collect(),
+    )
+}
+
+fn _cid_hash_to_hashmap(cid: &Cid) -> HashMapItem {
+    let hash = cid.hash();
+    HashMapItem::Map(
+        vec![
+            ("code".to_string(), HashMapItem::Integer(hash.code() as i128)),
+            ("size".to_string(), HashMapItem::Integer(hash.size() as i128)),
+            ("digest".to_string(), HashMapItem::Bytes(Cow::Owned(hash.digest().to_vec()))),
+        ]
+            .into_iter()
+            .collect(),
+    )
+}
+
+fn cid_to_hashmap(cid: &Cid) -> HashMapItem {
+    HashMapItem::Map(
+        vec![
+            ("version".to_string(), HashMapItem::Integer(cid.version() as i128)),
+            ("codec".to_string(), HashMapItem::Integer(cid.codec() as i128)),
+            ("hash".to_string(), _cid_hash_to_hashmap(cid)),
+        ]
+            .into_iter()
+            .collect(),
+    )
+}
+
 fn parse_dag_cbor_object<R: Read + Seek>(mut reader: &mut BufReader<R>) -> Result<Ipld> {
     let major = decode::read_major(&mut reader)?;
     Ok(match major.kind() {
@@ -90,7 +135,7 @@ fn parse_dag_cbor_object<R: Read + Seek>(mut reader: &mut BufReader<R>) -> Resul
 }
 
 #[pyfunction]
-fn decode_dag_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
+fn decode_dag_cbor_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
     let mut reader = BufReader::new(Cursor::new(data));
 
     let mut parts = Vec::new();
@@ -105,7 +150,7 @@ fn decode_dag_multi(data: Vec<u8>) -> PyResult<Vec<HashMapItem>> {
     Ok(parts)
 }
 
-fn _decode_dag(data: Vec<u8>) -> Result<Ipld> {
+fn _decode_dag_cbor(data: Vec<u8>) -> Result<Ipld> {
     let mut reader = BufReader::new(Cursor::new(data));
     parse_dag_cbor_object(&mut reader)
 }
@@ -115,10 +160,10 @@ fn _ipld_to_python(ipld: Ipld) -> HashMapItem {
 }
 
 #[pyfunction]
-fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
+fn decode_car(data: Vec<u8>) -> (HashMapItem, HashMap<String, HashMapItem>) {
     let car = executor::block_on(CarReader::new(data.as_slice())).unwrap();
-    // TODO return header to python
-    let records = executor::block_on(car
+    let header = car_header_to_hashmap(car.header());
+    let blocks = executor::block_on(car
         .stream()
         .filter_map(|block| async {
             if let Ok((cid, bytes)) = block {
@@ -136,32 +181,30 @@ fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
         })
         .collect::<HashMap<String, Ipld>>());
 
-    let mut decoded_records = HashMap::new();
-    for (cid, ipld) in &records {
-        // TODO return decoded cid?
-        decoded_records.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
+    let mut decoded_blocks = HashMap::new();
+    for (cid, ipld) in &blocks {
+        decoded_blocks.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
     }
 
-    decoded_records
+    (header, decoded_blocks)
 }
 
 #[pyfunction]
-fn decode_dag(data: Vec<u8>) -> PyResult<HashMapItem> {
-    Ok(_ipld_to_python(_decode_dag(data)?))
+fn decode_dag_cbor(data: Vec<u8>) -> PyResult<HashMapItem> {
+    Ok(_ipld_to_python(_decode_dag_cbor(data)?))
 }
 
 #[pyfunction]
-fn decode_cid(data: String) -> PyResult<String> {
+fn decode_cid(data: String) -> PyResult<HashMapItem> {
     let cid = Cid::try_from(data.as_str()).unwrap();
-    // TODO - return a proper python object/dict
-    Ok(cid.to_string())
+    Ok(cid_to_hashmap(&cid))
 }
 
 #[pymodule]
 fn libipld(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(decode_car, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
     Ok(())
 }
