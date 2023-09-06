@@ -9,8 +9,6 @@ use iroh_car::{CarHeader, CarReader};
 use futures::{executor, stream::StreamExt};
 use ::libipld::cbor::cbor::MajorKind;
 use ::libipld::cbor::decode;
-use ::libipld::multihash::{MultihashDigest};
-use ::libipld::codec::Codec;
 use ::libipld::{cid::Cid, Ipld};
 
 
