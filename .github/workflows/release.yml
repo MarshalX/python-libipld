@@ -76,6 +76,12 @@ jobs:
           python-version: '3.11'
           architecture: ${{ matrix.python-architecture || 'x64' }}
 
+      - name: Install rust stable
+        id: rust-toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
