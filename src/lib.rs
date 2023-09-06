@@ -68,8 +68,33 @@ fn ipld_to_hashmap(x: Ipld) -> HashMapItem {
                 .map(|(k, v)| (k, ipld_to_hashmap(v)))
                 .collect(),
         ),
-        Ipld::Link(cid) => HashMapItem::String(cid.to_string()),
+        Ipld::Link(cid) => cid_to_hashmap(&cid),
     }
+}
+
+fn _cid_hash_to_hashmap(cid: &Cid) -> HashMapItem {
+    let hash = cid.hash();
+    HashMapItem::Map(
+        vec![
+            ("code".to_string(), HashMapItem::Integer(hash.code() as i128)),
+            ("size".to_string(), HashMapItem::Integer(hash.size() as i128)),
+            ("digest".to_string(), HashMapItem::Bytes(Cow::Owned(hash.digest().to_vec()))),
+        ]
+        .into_iter()
+        .collect(),
+    )
+}
+
+fn cid_to_hashmap(cid: &Cid) -> HashMapItem {
+    HashMapItem::Map(
+        vec![
+            ("version".to_string(), HashMapItem::Integer(cid.version() as i128)),
+            ("codec".to_string(), HashMapItem::Integer(cid.codec() as i128)),
+            ("hash".to_string(), _cid_hash_to_hashmap(cid)),
+        ]
+        .into_iter()
+        .collect(),
+    )
 }
 
 fn parse_dag_cbor_object<R: Read + Seek>(mut reader: &mut BufReader<R>) -> Result<Ipld> {
@@ -153,10 +178,9 @@ fn decode_dag(data: Vec<u8>) -> PyResult<HashMapItem> {
 }
 
 #[pyfunction]
-fn decode_cid(data: String) -> PyResult<String> {
+fn decode_cid(data: String) -> PyResult<HashMapItem> {
     let cid = Cid::try_from(data.as_str()).unwrap();
-    // TODO - return a proper python object/dict
-    Ok(cid.to_string())
+    Ok(cid_to_hashmap(&cid))
 }
 
 #[pymodule]
