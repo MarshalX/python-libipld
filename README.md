@@ -19,7 +19,7 @@ print(libipld.decode_dag_cbor(b'\xa2aa\x0cabfhello!\x82\x00\x01'))
 
 - Decode DAG CBOR (`decode_cid(str) -> dict`)
 - Decode CID (`decode_dag_cbor(bytes) -> dict`, `decode_dag_cbor_multi(bytes) -> list[dict]`)
-- Decode CAR (`decode_car(bytes) -> dict[str, dict]`)
+- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[str, dict]]`). Returns a header and blocks mapped by CID. 
 
 ## Installation
 

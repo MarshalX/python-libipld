@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::conversion::ToPyObject;
 use pyo3::{PyObject, Python};
 use anyhow::Result;
-use iroh_car::CarReader;
+use iroh_car::{CarHeader, CarReader};
 use futures::{executor, stream::StreamExt};
 use ::libipld::cbor::cbor::MajorKind;
 use ::libipld::cbor::decode;
@@ -68,8 +68,28 @@ fn ipld_to_hashmap(x: Ipld) -> HashMapItem {
                 .map(|(k, v)| (k, ipld_to_hashmap(v)))
                 .collect(),
         ),
-        Ipld::Link(cid) => cid_to_hashmap(&cid),
+        Ipld::Link(cid) => HashMapItem::String(cid.to_string()),
     }
+}
+
+fn car_header_to_hashmap(header: &CarHeader) -> HashMapItem {
+    HashMapItem::Map(
+        vec![
+            ("version".to_string(), HashMapItem::Integer(header.version() as i128)),
+            (
+                "roots".to_string(),
+                HashMapItem::List(
+                    header
+                        .roots()
+                        .iter()
+                        .map(|cid| HashMapItem::String(cid.to_string()))
+                        .collect(),
+                ),
+            ),
+        ]
+            .into_iter()
+            .collect(),
+    )
 }
 
 fn _cid_hash_to_hashmap(cid: &Cid) -> HashMapItem {
@@ -80,8 +100,8 @@ fn _cid_hash_to_hashmap(cid: &Cid) -> HashMapItem {
             ("size".to_string(), HashMapItem::Integer(hash.size() as i128)),
             ("digest".to_string(), HashMapItem::Bytes(Cow::Owned(hash.digest().to_vec()))),
         ]
-        .into_iter()
-        .collect(),
+            .into_iter()
+            .collect(),
     )
 }
 
@@ -92,8 +112,8 @@ fn cid_to_hashmap(cid: &Cid) -> HashMapItem {
             ("codec".to_string(), HashMapItem::Integer(cid.codec() as i128)),
             ("hash".to_string(), _cid_hash_to_hashmap(cid)),
         ]
-        .into_iter()
-        .collect(),
+            .into_iter()
+            .collect(),
     )
 }
 
@@ -142,10 +162,10 @@ fn _ipld_to_python(ipld: Ipld) -> HashMapItem {
 }
 
 #[pyfunction]
-fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
+fn decode_car(data: Vec<u8>) -> (HashMapItem, HashMap<String, HashMapItem>) {
     let car = executor::block_on(CarReader::new(data.as_slice())).unwrap();
-    // TODO return header to python
-    let records = executor::block_on(car
+    let header = car_header_to_hashmap(car.header());
+    let blocks = executor::block_on(car
         .stream()
         .filter_map(|block| async {
             if let Ok((cid, bytes)) = block {
@@ -163,12 +183,12 @@ fn decode_car(data: Vec<u8>) -> HashMap<String, HashMapItem> {
         })
         .collect::<HashMap<String, Ipld>>());
 
-    let mut decoded_records = HashMap::new();
-    for (cid, ipld) in &records {
-        decoded_records.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
+    let mut decoded_blocks = HashMap::new();
+    for (cid, ipld) in &blocks {
+        decoded_blocks.insert(cid.to_string(), _ipld_to_python(ipld.clone()));
     }
 
-    decoded_records
+    (header, decoded_blocks)
 }
 
 #[pyfunction]
