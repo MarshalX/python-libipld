@@ -33,10 +33,6 @@ jobs:
             target: i686
             python-architecture: x86
             interpreter: 3.7 3.8 3.9 3.10 3.11
-          - os: windows
-            ls: dir
-            target: aarch64
-            interpreter: 3.11
           - os: macos
             target: aarch64
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12 pypy3.8 pypy3.9 pypy3.10
@@ -67,13 +63,17 @@ jobs:
             platform: linux
             target: s390x
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
+        exclude:
+          # Windows on arm64 only supports Python 3.11+
+          - os: windows
+            target: aarch64
 
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.interpreter }}
+          python-version: '3.11'
           architecture: ${{ matrix.python-architecture || 'x64' }}
 
       - name: Build wheels
