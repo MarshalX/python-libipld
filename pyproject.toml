@@ -28,8 +28,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Author" = "https://github.com/MarshalX"
+"Homepage" = "https://github.com/MarshalX/python-libipld"
 "Tracker" = "https://github.com/MarshalX/python-libipld/issues"
+"Author" = "https://github.com/MarshalX"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
