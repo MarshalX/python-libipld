@@ -1,6 +1,6 @@
 [package]
 name = "libipld"
-version = "0.0.1-pre"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "Python binding to the Rust IPLD library"
