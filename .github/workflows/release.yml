@@ -22,19 +22,23 @@ jobs:
         target: [ x86_64, aarch64 ]
         manylinux: [ auto ]
         include:
-          - os: ubuntu
-            platform: linux
           - os: windows
             ls: dir
-            interpreter: 3.7 3.8 3.9 3.10 3.11
+            interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
           - os: windows
             ls: dir
             target: i686
             python-architecture: x86
-            interpreter: 3.7 3.8 3.9 3.10 3.11
+            interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
+          - os: windows
+            ls: dir
+            target: aarch64
+            interpreter: 3.11 3.12
           - os: macos
             target: aarch64
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12 pypy3.8 pypy3.9 pypy3.10
+          - os: ubuntu
+            platform: linux
           - os: ubuntu
             platform: linux
             target: i686
@@ -69,7 +73,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
@@ -106,7 +110,7 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
