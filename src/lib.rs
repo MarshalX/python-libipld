@@ -4,6 +4,7 @@ use std::io::{BufReader, Cursor, Read, Seek};
 use pyo3::prelude::*;
 use pyo3::conversion::ToPyObject;
 use pyo3::{PyObject, Python};
+use pyo3::types::{PyBytes};
 use anyhow::Result;
 use iroh_car::{CarHeader, CarReader};
 use futures::{executor, stream::StreamExt};
@@ -200,11 +201,26 @@ fn decode_cid(data: String) -> PyResult<HashMapItem> {
     Ok(cid_to_hashmap(&cid))
 }
 
+#[pyfunction]
+fn decode_multibase(py: Python, data: String) -> (char, PyObject) {
+    let (base, data) = multibase::decode(data).unwrap();
+    (base.code(), PyBytes::new(py, &data).into())
+}
+
+#[pyfunction]
+fn encode_multibase(code: char, data: Vec<u8>) -> String {
+    let base = multibase::Base::from_code(code).unwrap();
+    let encoded = multibase::encode(base, data);
+    encoded
+}
+
 #[pymodule]
 fn libipld(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(decode_car, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_multibase, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_multibase, m)?)?;
     Ok(())
 }
