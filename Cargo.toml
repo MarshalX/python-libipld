@@ -1,6 +1,6 @@
 [package]
 name = "libipld"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 license = "MIT"
 description = "Python binding to the Rust IPLD library"
@@ -19,3 +19,4 @@ anyhow = "1.0.75"
 futures = "0.3"
 libipld = { version = "0.16.0", features = ["dag-cbor", "dag-json", "dag-pb", "derive"] }
 iroh-car = "0.4.0"
+multibase = "0.9"
