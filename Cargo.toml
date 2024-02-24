@@ -1,6 +1,6 @@
 [package]
 name = "libipld"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 license = "MIT"
 description = "Python binding to the Rust IPLD library"
@@ -13,7 +13,7 @@ name = "libipld"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.19", features = ["generate-import-lib", "anyhow"] }
+pyo3 = { version = "0.20", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.7"
 anyhow = "1.0.75"
 futures = "0.3"
