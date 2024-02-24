@@ -1,17 +1,17 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::io::{BufReader, Cursor, Read, Seek};
-use pyo3::prelude::*;
-use pyo3::conversion::ToPyObject;
-use pyo3::{PyObject, Python};
-use pyo3::types::{PyBytes, PyDict, PyList};
-use anyhow::Result;
-use iroh_car::{CarHeader, CarReader, Error};
-use futures::{executor, stream::StreamExt};
-use ::libipld::cbor::cbor::MajorKind;
-use ::libipld::cbor::decode;
-use ::libipld::{cid::Cid, Ipld};
 
+use ::libipld::{cid::Cid, Ipld};
+use ::libipld::cbor::{cbor::MajorKind, DagCborCodec, decode};
+use ::libipld::prelude::Codec;
+use anyhow::Result;
+use futures::{executor, stream::StreamExt};
+use iroh_car::{CarHeader, CarReader, Error};
+use pyo3::{PyObject, Python};
+use pyo3::conversion::ToPyObject;
+use pyo3::prelude::*;
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 #[derive(Clone, PartialEq)]
 pub enum HashMapItem {
@@ -72,8 +72,7 @@ fn ipld_to_hashmap(x: Ipld) -> HashMapItem {
 }
 
 fn ipld_to_pyobject(py: Python<'_>, ipld: &Ipld) -> PyObject {
-    // this function takes so much time...
-     match ipld {
+    match ipld {
         Ipld::Null => py.None(),
         Ipld::Bool(b) => b.to_object(py),
         Ipld::String(s) => s.to_object(py),
@@ -86,7 +85,7 @@ fn ipld_to_pyobject(py: Python<'_>, ipld: &Ipld) -> PyObject {
                 list_obj.append(item_obj).unwrap();
             });
             list_obj.into()
-        },
+        }
         Ipld::Map(m) => {
             let dict_obj = PyDict::new(py);
             m.iter().for_each(|(key, value)| {
@@ -95,12 +94,28 @@ fn ipld_to_pyobject(py: Python<'_>, ipld: &Ipld) -> PyObject {
                 dict_obj.set_item(key_obj, value_obj).unwrap();
             });
             dict_obj.into()
-        },
-        Ipld::Bytes(b) => b.to_object(py),
-        _ => py.None(),
+        }
+        Ipld::Bytes(b) => PyBytes::new(py, b).into(),
+        Ipld::Link(cid) => cid.to_string().to_object(py),
+        _ => py.Ellipsis(),
     }
 }
 
+fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> &'py PyDict {
+    let dict_obj = PyDict::new(py);
+
+    dict_obj.set_item("version", header.version()).unwrap();
+
+    let roots = PyList::empty(py);
+    header.roots().iter().for_each(|cid| {
+        let cid_obj = cid.to_string().to_object(py);
+        roots.append(cid_obj).unwrap();
+    });
+
+    dict_obj.set_item("roots", roots).unwrap();
+
+    dict_obj.into()
+}
 
 fn car_header_to_hashmap(header: &CarHeader) -> HashMapItem {
     HashMapItem::Map(
@@ -222,21 +237,20 @@ fn decode_car(data: Vec<u8>) -> (HashMapItem, BTreeMap<String, HashMapItem>) {
 }
 
 #[pyfunction]
-fn decode_car_faster<'py>(py: Python<'py>, data: &[u8]) -> (HashMapItem, &'py PyDict) {
+fn decode_car_faster<'py>(py: Python<'py>, data: &[u8]) -> (&'py PyDict, &'py PyDict) {
     let car = executor::block_on(CarReader::new(data)).unwrap();
 
-    // TODO(MarshalX): rewrite this to use a PyDict instead of a HashMapItem
-    let header = car_header_to_hashmap(car.header());
-
+    let header = car_header_to_pydict(py, car.header());
     let parsed_blocks = PyDict::new(py);
 
     let blocks: Vec<Result<(Cid, Vec<u8>), Error>> = executor::block_on(car.stream().collect());
-
     blocks.into_iter().for_each(|block| {
         if let Ok((cid, bytes)) = block {
-            let mut reader = BufReader::new(Cursor::new(bytes));
-            if let Ok(ipld) = parse_dag_cbor_object(&mut reader) {
-                parsed_blocks.set_item(cid.to_string(), ipld_to_pyobject(py, &ipld)).unwrap();
+            let ipld = DagCborCodec.decode(&bytes);
+            if let Ok(ipld) = ipld {
+                let key = cid.to_string().to_object(py);
+                let value = ipld_to_pyobject(py, &ipld);
+                parsed_blocks.set_item(key, value).unwrap();
             }
         }
     });
@@ -245,8 +259,13 @@ fn decode_car_faster<'py>(py: Python<'py>, data: &[u8]) -> (HashMapItem, &'py Py
 }
 
 #[pyfunction]
-fn decode_dag_cbor(data: &[u8]) -> PyResult<HashMapItem> {
-    Ok(_ipld_to_python(_decode_dag_cbor(data)?))
+fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
+    let ipld = DagCborCodec.decode(data);
+    if let Ok(ipld) = ipld {
+        Ok(ipld_to_pyobject(py, &ipld))
+    } else {
+        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Failed to decode DAG-CBOR"))
+    }
 }
 
 #[pyfunction]
