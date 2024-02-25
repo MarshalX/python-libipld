@@ -1,9 +1,8 @@
 use std::io::{BufReader, Cursor, Read, Seek};
 
-use ::libipld::cid::Cid;
-use ::libipld::cbor::{cbor, cbor::MajorKind, DagCbor, decode};
+use ::libipld::cbor::{cbor, cbor::MajorKind, decode};
 use ::libipld::cbor::error::LengthOutOfRange;
-use ::libipld::prelude::{Codec, Decode};
+use ::libipld::cid::Cid;
 use anyhow::Result;
 use futures::{executor, stream::StreamExt};
 use iroh_car::{CarHeader, CarReader, Error};
@@ -109,7 +108,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<
 #[pyfunction]
 fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyList> {
     let mut reader = BufReader::new(Cursor::new(data));
-    let mut decoded_parts = PyList::empty(py);
+    let decoded_parts = PyList::empty(py);
 
     loop {
         let py_object = decode_dag_cbor_to_pyobject(py, &mut reader);
