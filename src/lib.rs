@@ -1,60 +1,16 @@
-use std::collections::BTreeMap;
-use std::io::{BufReader, Cursor, Read, Seek};
+use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 
-use ::libipld::cbor::{cbor, cbor::MajorKind, decode};
-use ::libipld::cbor::error::LengthOutOfRange;
+use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
+use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cid::Cid;
 use anyhow::Result;
+use byteorder::{BigEndian, ByteOrder};
 use futures::{executor, stream::StreamExt};
 use iroh_car::{CarHeader, CarReader, Error};
 use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
-
-fn pyobject_to_ipld(obj: &PyAny) -> Result<Ipld> {
-    if obj.is_none() {
-        Ok(Ipld::Null)
-    } else if let Ok(b) = obj.extract::<bool>() {
-        Ok(Ipld::Bool(b))
-    } else if let Ok(i) = obj.extract::<i128>() {
-        Ok(Ipld::Integer(i))
-    } else if let Ok(f) = obj.extract::<f64>() {
-        Ok(Ipld::Float(f))
-    } else if let Ok(b) = obj.extract::<&[u8]>() {
-        Ok(Ipld::Bytes(b.to_vec()))
-    } else if let Ok(s) = obj.extract::<String>() {
-        // this is not efficient
-        let cid = Cid::try_from(s.clone());
-        if let Ok(cid) = cid {
-            return Ok(Ipld::Link(cid));
-        }
-
-        Ok(Ipld::String(s))
-    } else if let Ok(l) = obj.downcast::<PyList>() {
-        let mut list = Vec::new();
-        l.iter().for_each(|item| {
-            let ipld = pyobject_to_ipld(item);
-            match ipld {
-                Ok(ipld) => { list.push(ipld) }
-                Err(e) => { get_err("Failed to convert list item to Ipld", e.to_string()); }
-            }
-        });
-        Ok(Ipld::List(list))
-    } else if let Ok(d) = obj.downcast::<PyDict>() {
-        let mut map = BTreeMap::new();
-        d.iter().for_each(|(key, value)| {
-            let ipld = pyobject_to_ipld(&value);
-            match ipld {
-                Ok(value) => { map.insert(key.to_string(), value); }
-                Err(e) => { get_err("Failed to convert map value to Ipld", e.to_string()); }
-            }
-        });
-        Ok(Ipld::Map(map))
-    } else {
-        Err(anyhow::anyhow!("Unsupported type"))
-    }
-}
 
 fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> &'py PyDict {
     let dict_obj = PyDict::new(py);
@@ -150,6 +106,68 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<
     Ok(py_object)
 }
 
+fn encode_dag_cbor_from_pyobject<W: Write>(py: Python, obj: &PyAny, w: &mut W) -> Result<()> {
+    if obj.is_none() {
+        encode::write_null(w)
+    } else if let Ok(b) = obj.extract::<bool>() {
+        let buf = if b { [cbor::TRUE.into()] } else { [cbor::FALSE.into()] };
+        Ok(w.write_all(&buf)?)
+    } else if let Ok(i) = obj.extract::<i128>() {
+        if i < 0 {
+            if -(i + 1) > u64::MAX as i128 {
+                return Err(NumberOutOfRange::new::<i128>().into());
+            }
+            encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)
+        } else {
+            if i > u64::MAX as i128 {
+                return Err(NumberOutOfRange::new::<i128>().into());
+            }
+            encode::write_u64(w, MajorKind::UnsignedInt, i as u64)
+        }
+    } else if let Ok(f) = obj.extract::<f64>() {
+        if !f.is_finite() {
+            return Err(NumberOutOfRange::new::<f64>().into());
+        }
+        let mut buf = [0xfb, 0, 0, 0, 0, 0, 0, 0, 0];
+        BigEndian::write_f64(&mut buf[1..], f);
+        Ok(w.write_all(&buf)?)
+    } else if let Ok(b) = obj.extract::<&[u8]>() {
+        encode::write_u64(w, MajorKind::ByteString, b.len() as u64)?;
+        Ok(w.write_all(b)?)
+    } else if let Ok(s) = obj.extract::<String>() {
+        // FIXME (MarshalX): it's not efficient to try to parse it as CID
+        let cid = Cid::try_from(s.as_str());
+        if let Ok(cid) = cid {
+            encode::write_tag(w, 42)?;
+            // FIXME (MarshalX): allocates
+            let buf = cid.to_bytes();
+            let len = buf.len();
+            encode::write_u64(w, MajorKind::ByteString, len as u64 + 1)?;
+            w.write_all(&[0])?;
+            Ok(w.write_all(&buf[..len])?)
+        } else {
+            encode::write_u64(w, MajorKind::TextString, s.len() as u64)?;
+            Ok(w.write_all(s.as_bytes())?)
+        }
+    } else if let Ok(l) = obj.downcast::<PyList>() {
+        encode::write_u64(w, MajorKind::Array, l.len() as u64)?;
+        for item in l.iter() {
+            encode_dag_cbor_from_pyobject(py, item, w)?;
+        }
+        Ok(())
+    } else if let Ok(d) = obj.downcast::<PyDict>() {
+        encode::write_u64(w, MajorKind::Map, d.len() as u64)?;
+        // FIXME (MarshalX): care about the order of keys?
+        for (key, value) in d.iter() {
+            encode_dag_cbor_from_pyobject(py, key, w)?;
+            encode_dag_cbor_from_pyobject(py, value, w)?;
+        }
+        Ok(())
+    } else {
+        return Err(UnknownTag(0).into());
+    }
+}
+
 #[pyfunction]
 fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyList> {
     let mut reader = BufReader::new(Cursor::new(data));
@@ -205,17 +223,14 @@ fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
 
 #[pyfunction]
 fn encode_dag_cbor<'py>(py: Python<'py>, data: &PyAny) -> PyResult<&'py PyBytes> {
-    let ipld = pyobject_to_ipld(&data);
-    if let Ok(ipld) = ipld {
-        let bytes = DagCborCodec.encode(&ipld);
-        if let Ok(bytes) = bytes {
-            return Ok(PyBytes::new(py, &bytes).into());
-        }
-
-        Err(get_err("Failed to encode DAG-CBOR", bytes.unwrap_err().to_string()))
-    } else {
-        Err(get_err("Failed to encode DAG-CBOR", ipld.unwrap_err().to_string()))
+    let mut buf = &mut BufWriter::new(Vec::new());
+    if let Err(e) = encode_dag_cbor_from_pyobject(py, data, &mut buf) {
+        return Err(get_err("Failed to encode DAG-CBOR", e.to_string()));
     }
+    if let Err(e) = buf.flush() {
+        return Err(get_err("Failed to flush buffer", e.to_string()));
+    }
+    Ok(PyBytes::new(py, &buf.get_ref()))
 }
 
 #[pyfunction]
