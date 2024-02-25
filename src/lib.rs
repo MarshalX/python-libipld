@@ -1,8 +1,9 @@
 use std::io::{BufReader, Cursor, Read, Seek};
 
-use ::libipld::{cid::Cid, Ipld};
-use ::libipld::cbor::{cbor::MajorKind, DagCborCodec, decode};
-use ::libipld::prelude::Codec;
+use ::libipld::cid::Cid;
+use ::libipld::cbor::{cbor, cbor::MajorKind, DagCbor, decode};
+use ::libipld::cbor::error::LengthOutOfRange;
+use ::libipld::prelude::{Codec, Decode};
 use anyhow::Result;
 use futures::{executor, stream::StreamExt};
 use iroh_car::{CarHeader, CarReader, Error};
@@ -10,35 +11,6 @@ use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
-
-fn ipld_to_pyobject(py: Python<'_>, ipld: &Ipld) -> PyObject {
-    match ipld {
-        Ipld::Null => py.None(),
-        Ipld::Bool(b) => b.to_object(py),
-        Ipld::Integer(i) => i.to_object(py),
-        Ipld::Float(f) => f.to_object(py),
-        Ipld::String(s) => s.to_object(py),
-        Ipld::Bytes(b) => PyBytes::new(py, b).into(),
-        Ipld::Link(cid) => cid.to_string().to_object(py),
-        Ipld::List(l) => {
-            let list_obj = PyList::empty(py);
-            l.iter().for_each(|item| {
-                let item_obj = ipld_to_pyobject(py, item);
-                list_obj.append(item_obj).unwrap();
-            });
-            list_obj.into()
-        }
-        Ipld::Map(m) => {
-            let dict_obj = PyDict::new(py);
-            m.iter().for_each(|(key, value)| {
-                let key_obj = key.to_object(py);
-                let value_obj = ipld_to_pyobject(py, value);
-                dict_obj.set_item(key_obj, value_obj).unwrap();
-            });
-            dict_obj.into()
-        }
-    }
-}
 
 fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> &'py PyDict {
     let dict_obj = PyDict::new(py);
@@ -77,40 +49,78 @@ fn cid_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> &'py PyDict {
     dict_obj.into()
 }
 
-fn parse_dag_cbor_object<R: Read + Seek>(r: &mut R) -> Result<Ipld> {
+fn decode_len(len: u64) -> Result<usize> {
+    Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
+}
+
+fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<PyObject> {
     let major = decode::read_major(r)?;
-    Ok(match major.kind() {
-        MajorKind::UnsignedInt | MajorKind::NegativeInt => Ipld::Integer(major.info() as i128),
-        MajorKind::ByteString => Ipld::Bytes(decode::read_bytes(r, major.info() as u64)?),
-        MajorKind::TextString => Ipld::String(decode::read_str(r, major.info() as u64)?),
-        MajorKind::Array => Ipld::List(decode::read_list(r, major.info() as u64)?),
-        MajorKind::Map => Ipld::Map(decode::read_map(r, major.info() as u64)?),
+    let py_object = match major.kind() {
+        MajorKind::UnsignedInt => (decode::read_uint(r, major)? as i128).to_object(py),
+        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i128).to_object(py),
+        MajorKind::ByteString => {
+            let len = decode::read_uint(r, major)?;
+            PyBytes::new(py, &decode::read_bytes(r, len)?).into()
+        }
+        MajorKind::TextString => {
+            let len = decode::read_uint(r, major)?;
+            decode::read_str(r, len)?.to_object(py)
+        }
+        MajorKind::Array => {
+            let len = decode_len(decode::read_uint(r, major)?)?;
+            // TODO (MarshalX): how to init list with capacity?
+            let list = PyList::empty(py);
+            for _ in 0..len {
+                list.append(decode_dag_cbor_to_pyobject(py, r).unwrap()).unwrap();
+            }
+            list.into()
+        }
+        MajorKind::Map => {
+            let len = decode_len(decode::read_uint(r, major)?)?;
+            let dict = PyDict::new(py);
+            for _ in 0..len {
+                // FIXME (MarshalX): we should raise on duplicate keys?
+                let key = decode_dag_cbor_to_pyobject(py, r).unwrap();
+                let value = decode_dag_cbor_to_pyobject(py, r).unwrap();
+                dict.set_item(key, value).unwrap();
+            }
+            dict.into()
+        }
         MajorKind::Tag => {
-            if major.info() != 42 {
+            let value = decode::read_uint(r, major)?;
+            if value != 42 {
                 return Err(anyhow::anyhow!("non-42 tags are not supported"));
             }
 
-            Ipld::Link(decode::read_link(r)?)
+            decode::read_link(r)?.to_string().to_object(py)
         }
-        MajorKind::Other => Ipld::Null,
-    })
+        MajorKind::Other => match major {
+            cbor::FALSE => false.to_object(py),
+            cbor::TRUE => true.to_object(py),
+            cbor::NULL => py.None(),
+            cbor::F32 => (decode::read_f32(r)? as f64).to_object(py),
+            cbor::F64 => decode::read_f64(r)?.to_object(py),
+            _ => return Err(anyhow::anyhow!(format!("unsupported major type"))),
+        },
+    };
+    Ok(py_object)
 }
 
 #[pyfunction]
-fn decode_dag_cbor_multi(py: Python, data: &[u8]) -> PyResult<Vec<PyObject>> {
+fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyList> {
     let mut reader = BufReader::new(Cursor::new(data));
-    let mut parts = Vec::new();
+    let mut decoded_parts = PyList::empty(py);
 
     loop {
-        let ipld = parse_dag_cbor_object(&mut reader);
-        if let Ok(cbor) = ipld {
-            parts.push(ipld_to_pyobject(py, &cbor));
+        let py_object = decode_dag_cbor_to_pyobject(py, &mut reader);
+        if let Ok(py_object) = py_object {
+            decoded_parts.append(py_object).unwrap();
         } else {
             break;
         }
     }
 
-    Ok(parts)
+    Ok(decoded_parts)
 }
 
 #[pyfunction]
@@ -128,11 +138,10 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &
     let blocks: Vec<Result<(Cid, Vec<u8>), Error>> = executor::block_on(car.stream().collect());
     blocks.into_iter().for_each(|block| {
         if let Ok((cid, bytes)) = block {
-            let ipld = DagCborCodec.decode(&bytes);
-            if let Ok(ipld) = ipld {
+            let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(bytes)));
+            if let Ok(py_object) = py_object {
                 let key = cid.to_string().to_object(py);
-                let value = ipld_to_pyobject(py, &ipld);
-                parsed_blocks.set_item(key, value).unwrap();
+                parsed_blocks.set_item(key, py_object).unwrap();
             }
         }
     });
@@ -142,11 +151,11 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &
 
 #[pyfunction]
 fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
-    let ipld = DagCborCodec.decode(data);
-    if let Ok(ipld) = ipld {
-        Ok(ipld_to_pyobject(py, &ipld))
+    let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(data)));
+    if let Ok(py_object) = py_object {
+        Ok(py_object)
     } else {
-        Err(get_err("Failed to decode DAG-CBOR", ipld.unwrap_err().to_string()))
+        Err(get_err("Failed to decode DAG-CBOR", py_object.unwrap_err().to_string()))
     }
 }
 
