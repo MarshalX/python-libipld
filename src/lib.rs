@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{BufReader, Cursor, Read, Seek};
 
 use ::libipld::{cid::Cid, Ipld};
@@ -37,6 +38,50 @@ fn ipld_to_pyobject(py: Python<'_>, ipld: &Ipld) -> PyObject {
             });
             dict_obj.into()
         }
+    }
+}
+
+fn pyobject_to_ipld(obj: &PyAny) -> Result<Ipld> {
+    if obj.is_none() {
+        Ok(Ipld::Null)
+    } else if let Ok(b) = obj.extract::<bool>() {
+        Ok(Ipld::Bool(b))
+    } else if let Ok(i) = obj.extract::<i128>() {
+        Ok(Ipld::Integer(i))
+    } else if let Ok(f) = obj.extract::<f64>() {
+        Ok(Ipld::Float(f))
+    } else if let Ok(b) = obj.extract::<&[u8]>() {
+        Ok(Ipld::Bytes(b.to_vec()))
+    } else if let Ok(s) = obj.extract::<String>() {
+        // this is not efficient
+        let cid = Cid::try_from(s.clone());
+        if let Ok(cid) = cid {
+            return Ok(Ipld::Link(cid));
+        }
+
+        Ok(Ipld::String(s))
+    } else if let Ok(l) = obj.downcast::<PyList>() {
+        let mut list = Vec::new();
+        l.iter().for_each(|item| {
+            let ipld = pyobject_to_ipld(item);
+            match ipld {
+                Ok(ipld) => { list.push(ipld) }
+                Err(e) => { get_err("Failed to convert list item to Ipld", e.to_string()); }
+            }
+        });
+        Ok(Ipld::List(list))
+    } else if let Ok(d) = obj.downcast::<PyDict>() {
+        let mut map = BTreeMap::new();
+        d.iter().for_each(|(key, value)| {
+            let ipld = pyobject_to_ipld(&value);
+            match ipld {
+                Ok(value) => { map.insert(key.to_string(), value); }
+                Err(e) => { get_err("Failed to convert map value to Ipld", e.to_string()); }
+            }
+        });
+        Ok(Ipld::Map(map))
+    } else {
+        Err(anyhow::anyhow!("Unsupported type"))
     }
 }
 
@@ -151,6 +196,21 @@ fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
 }
 
 #[pyfunction]
+fn encode_dag_cbor<'py>(py: Python<'py>, data: &PyAny) -> PyResult<&'py PyBytes> {
+    let ipld = pyobject_to_ipld(&data);
+    if let Ok(ipld) = ipld {
+        let bytes = DagCborCodec.encode(&ipld);
+        if let Ok(bytes) = bytes {
+            return Ok(PyBytes::new(py, &bytes).into());
+        }
+
+        Err(get_err("Failed to encode DAG-CBOR", bytes.unwrap_err().to_string()))
+    } else {
+        Err(get_err("Failed to encode DAG-CBOR", ipld.unwrap_err().to_string()))
+    }
+}
+
+#[pyfunction]
 fn decode_cid(py: Python, data: String) -> PyResult<&PyDict> {
     let cid = Cid::try_from(data.as_str());
     if let Ok(cid) = cid {
@@ -189,6 +249,7 @@ fn libipld(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(decode_car, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_dag_cbor, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
     m.add_function(wrap_pyfunction!(decode_multibase, m)?)?;
     m.add_function(wrap_pyfunction!(encode_multibase, m)?)?;
