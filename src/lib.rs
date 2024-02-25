@@ -114,7 +114,7 @@ fn decode_dag_cbor_multi(py: Python, data: &[u8]) -> PyResult<Vec<PyObject>> {
 }
 
 #[pyfunction]
-fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &'py PyDict)> {
+pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &'py PyDict)> {
     let car_response = executor::block_on(CarReader::new(data));
     if let Err(e) = car_response {
         return Err(get_err("Failed to decode CAR", e.to_string()));

@@ -10,13 +10,23 @@ keywords = ["python", "binding", "library", "lib", "ipld", "cid", "multibase", "
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "libipld"
-crate-type = ["cdylib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.20", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.7"
 anyhow = "1.0.75"
 futures = "0.3"
-libipld = { version = "0.16.0", features = ["dag-cbor", "dag-json", "dag-pb", "derive"] }
+libipld = { version = "0.16.0", features = ["dag-cbor"] }
 iroh-car = "0.4.0"
 multibase = "0.9"
+
+[workspace]
+members = [ "profiling" ]
+
+[profile.release]
+codegen-units = 1
+debug = false
+incremental = false
+lto = true
+opt-level = 3
