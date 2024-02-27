@@ -135,7 +135,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
 
         if i < 0 {
             if -(i + 1) > u64::MAX as i128 {
-                return Err(NumberOutOfRange::new::<u64>().into());
+                return Err(NumberOutOfRange::new::<i128>().into());
             }
             encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?;
         } else {
