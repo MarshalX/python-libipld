@@ -6,11 +6,11 @@ use ::libipld::cid::Cid;
 use anyhow::Result;
 use byteorder::{BigEndian, ByteOrder};
 use futures::{executor, stream::StreamExt};
-use iroh_car::{CarHeader, CarReader, Error};
+use iroh_car::{CarHeader, CarReader, Error as CarError};
 use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList};
+use pyo3::types::*;
 
 fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> &'py PyDict {
     let dict_obj = PyDict::new(py);
@@ -53,7 +53,7 @@ fn decode_len(len: u64) -> Result<usize> {
     Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
 }
 
-fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<PyObject> {
+fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usize) -> Result<PyObject> {
     let major = decode::read_major(r)?;
     let py_object = match major.kind() {
         MajorKind::UnsignedInt => (decode::read_uint(r, major)? as i128).to_object(py),
@@ -71,7 +71,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<
             // TODO (MarshalX): how to init list with capacity?
             let list = PyList::empty(py);
             for _ in 0..len {
-                list.append(decode_dag_cbor_to_pyobject(py, r).unwrap()).unwrap();
+                list.append(decode_dag_cbor_to_pyobject(py, r, deep + 1)?).unwrap();
             }
             list.into()
         }
@@ -80,8 +80,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<
             let dict = PyDict::new(py);
             for _ in 0..len {
                 // FIXME (MarshalX): we should raise on duplicate keys?
-                let key = decode_dag_cbor_to_pyobject(py, r).unwrap();
-                let value = decode_dag_cbor_to_pyobject(py, r).unwrap();
+                let key = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
+                let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
                 dict.set_item(key, value).unwrap();
             }
             dict.into()
@@ -106,63 +106,115 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R) -> Result<
     Ok(py_object)
 }
 
-fn encode_dag_cbor_from_pyobject<W: Write>(py: Python, obj: &PyAny, w: &mut W) -> Result<()> {
+fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny, w: &mut W) -> Result<()> {
+    /* Order is important for performance!
+
+    Fast checks go first:
+    - None
+    - bool
+    - int
+    - list
+    - dict
+    - str
+    Then slow checks:
+    - bytes
+    - float
+     */
+
     if obj.is_none() {
-        encode::write_null(w)
-    } else if let Ok(b) = obj.extract::<bool>() {
-        let buf = if b { [cbor::TRUE.into()] } else { [cbor::FALSE.into()] };
-        Ok(w.write_all(&buf)?)
-    } else if let Ok(i) = obj.extract::<i128>() {
+        encode::write_null(w)?;
+
+        Ok(())
+    } else if obj.is_instance_of::<PyBool>() {
+        let buf = if obj.is_true()? { [cbor::TRUE.into()] } else { [cbor::FALSE.into()] };
+        w.write_all(&buf)?;
+
+        Ok(())
+    } else if obj.is_instance_of::<PyInt>() {
+        let i: i128 = obj.extract()?;
+
         if i < 0 {
             if -(i + 1) > u64::MAX as i128 {
                 return Err(NumberOutOfRange::new::<i128>().into());
             }
-            encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)
+            encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?;
         } else {
             if i > u64::MAX as i128 {
                 return Err(NumberOutOfRange::new::<i128>().into());
             }
-            encode::write_u64(w, MajorKind::UnsignedInt, i as u64)
+            encode::write_u64(w, MajorKind::UnsignedInt, i as u64)?;
         }
-    } else if let Ok(f) = obj.extract::<f64>() {
-        if !f.is_finite() {
+
+        Ok(())
+    } else if obj.is_instance_of::<PyList>() {
+        let seq: &PySequence = obj.downcast().unwrap();
+        let len = obj.len()?;
+
+        encode::write_u64(w, MajorKind::Array, len as u64)?;
+
+        for i in 0..len {
+            encode_dag_cbor_from_pyobject(py, seq.get_item(i)?, w)?;
+        }
+
+        Ok(())
+    } else if obj.is_instance_of::<PyDict>() {
+        let map: &PyMapping = obj.downcast().unwrap();
+        let keys = map.keys()?;
+        let values = map.values()?;
+        let len = map.len()?;
+
+        encode::write_u64(w, MajorKind::Map, len as u64)?;
+
+        // FIXME (MarshalX): care about the order of keys?
+        for i in 0..len {
+            encode_dag_cbor_from_pyobject(py, keys.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, values.get_item(i)?, w)?;
+        }
+
+        Ok(())
+    } else if obj.is_instance_of::<PyFloat>() {
+        let f: &PyFloat = obj.downcast().unwrap();
+        let v = f.value();
+
+        if !v.is_finite() {
             return Err(NumberOutOfRange::new::<f64>().into());
         }
+
         let mut buf = [0xfb, 0, 0, 0, 0, 0, 0, 0, 0];
-        BigEndian::write_f64(&mut buf[1..], f);
-        Ok(w.write_all(&buf)?)
-    } else if let Ok(b) = obj.extract::<&[u8]>() {
-        encode::write_u64(w, MajorKind::ByteString, b.len() as u64)?;
-        Ok(w.write_all(b)?)
-    } else if let Ok(s) = obj.extract::<String>() {
+        BigEndian::write_f64(&mut buf[1..], v);
+        w.write_all(&buf)?;
+
+        Ok(())
+    } else if obj.is_instance_of::<PyBytes>() || obj.is_instance_of::<PyByteArray>() {
+        let b: &PyBytes = obj.downcast().unwrap();
+        let l: u64 = b.len()? as u64;
+
+        encode::write_u64(w, MajorKind::ByteString, l)?;
+        w.write_all(b.as_bytes())?;
+
+        Ok(())
+    } else if obj.is_instance_of::<PyString>() {
+        let s: &PyString = obj.downcast().unwrap();
+
         // FIXME (MarshalX): it's not efficient to try to parse it as CID
-        let cid = Cid::try_from(s.as_str());
+        let cid = Cid::try_from(s.to_str()?);
         if let Ok(cid) = cid {
-            encode::write_tag(w, 42)?;
             // FIXME (MarshalX): allocates
             let buf = cid.to_bytes();
             let len = buf.len();
+
+            encode::write_tag(w, 42)?;
             encode::write_u64(w, MajorKind::ByteString, len as u64 + 1)?;
             w.write_all(&[0])?;
-            Ok(w.write_all(&buf[..len])?)
+            w.write_all(&buf[..len])?;
+
+            Ok(())
         } else {
-            encode::write_u64(w, MajorKind::TextString, s.len() as u64)?;
-            Ok(w.write_all(s.as_bytes())?)
+            encode::write_u64(w, MajorKind::TextString, s.len()? as u64)?;
+            w.write_all(s.to_str()?.as_bytes())?;
+
+            Ok(())
         }
-    } else if let Ok(l) = obj.downcast::<PyList>() {
-        encode::write_u64(w, MajorKind::Array, l.len() as u64)?;
-        for item in l.iter() {
-            encode_dag_cbor_from_pyobject(py, item, w)?;
-        }
-        Ok(())
-    } else if let Ok(d) = obj.downcast::<PyDict>() {
-        encode::write_u64(w, MajorKind::Map, d.len() as u64)?;
-        // FIXME (MarshalX): care about the order of keys?
-        for (key, value) in d.iter() {
-            encode_dag_cbor_from_pyobject(py, key, w)?;
-            encode_dag_cbor_from_pyobject(py, value, w)?;
-        }
-        Ok(())
     } else {
         return Err(UnknownTag(0).into());
     }
@@ -174,7 +226,7 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyL
     let decoded_parts = PyList::empty(py);
 
     loop {
-        let py_object = decode_dag_cbor_to_pyobject(py, &mut reader);
+        let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
         if let Ok(py_object) = py_object {
             decoded_parts.append(py_object).unwrap();
         } else {
@@ -197,10 +249,10 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &
     let header = car_header_to_pydict(py, car.header());
     let parsed_blocks = PyDict::new(py);
 
-    let blocks: Vec<Result<(Cid, Vec<u8>), Error>> = executor::block_on(car.stream().collect());
+    let blocks: Vec<Result<(Cid, Vec<u8>), CarError>> = executor::block_on(car.stream().collect());
     blocks.into_iter().for_each(|block| {
         if let Ok((cid, bytes)) = block {
-            let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(bytes)));
+            let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(bytes)), 0);
             if let Ok(py_object) = py_object {
                 let key = cid.to_string().to_object(py);
                 parsed_blocks.set_item(key, py_object).unwrap();
@@ -213,7 +265,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &
 
 #[pyfunction]
 fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
-    let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(data)));
+    let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(data)), 0);
     if let Ok(py_object) = py_object {
         Ok(py_object)
     } else {
