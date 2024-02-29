@@ -185,7 +185,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
         w.write_all(&buf)?;
 
         Ok(())
-    } else if obj.is_instance_of::<PyBytes>() || obj.is_instance_of::<PyByteArray>() {
+    } else if obj.is_instance_of::<PyBytes>() {
         let b: &PyBytes = obj.downcast().unwrap();
         let l: u64 = b.len()? as u64;
 
@@ -306,10 +306,24 @@ fn decode_multibase(py: Python, data: String) -> PyResult<(char, PyObject)> {
 }
 
 #[pyfunction]
-fn encode_multibase(code: char, data: &[u8]) -> PyResult<String> {
+fn encode_multibase(code: char, data: &PyAny) -> PyResult<String> {
+    let data_bytes: &[u8];
+    if data.is_instance_of::<PyBytes>() {
+        let b: &PyBytes = data.downcast().unwrap();
+        data_bytes = b.as_bytes();
+    } else if data.is_instance_of::<PyByteArray>() {
+        let b: &PyByteArray = data.downcast().unwrap();
+        data_bytes = unsafe { b.as_bytes() };
+    } else if data.is_instance_of::<PyString>() {
+        let s: &PyString = data.downcast().unwrap();
+        data_bytes = s.to_str()?.as_bytes();
+    } else {
+        return Err(get_err("Failed to encode multibase", "Unsupported data type".to_string()));
+    }
+
     let base = multibase::Base::from_code(code);
     if let Ok(base) = base {
-        Ok(multibase::encode(base, data))
+        Ok(multibase::encode(base, data_bytes))
     } else {
         Err(get_err("Failed to encode multibase", base.unwrap_err().to_string()))
     }
