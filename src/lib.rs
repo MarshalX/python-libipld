@@ -210,8 +210,10 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
 
             Ok(())
         } else {
-            encode::write_u64(w, MajorKind::TextString, s.len()? as u64)?;
-            w.write_all(s.to_str()?.as_bytes())?;
+            let buf = s.to_str()?.as_bytes();
+
+            encode::write_u64(w, MajorKind::TextString, buf.len() as u64)?;
+            w.write_all(buf)?;
 
             Ok(())
         }
