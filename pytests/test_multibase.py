@@ -5,6 +5,7 @@ import pytest
 def test_multibase_encode() -> None:
     assert libipld.encode_multibase('7', 'yes mani !') == '7362625631006654133464440102'
     assert libipld.encode_multibase('u', b'yes mani !') == 'ueWVzIG1hbmkgIQ'
+    assert libipld.encode_multibase('u', bytes(b'yes mani !')) == 'ueWVzIG1hbmkgIQ'
     assert libipld.encode_multibase(
         'z',
         b'\xe7\x01\x03\xe2@y~I\xd8W\xdb}\xfb\xb1\xc4uG\xd6ec\xf8]\xb3\x16\xd0;\x11S\x19\xcfX\xf8\xb5QB'
