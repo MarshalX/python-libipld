@@ -23,3 +23,8 @@ venv
 # Local test files
 payloads
 test.py
+
+# Cache
+__pycache__
+.benchmarks
+.pytest_cache
