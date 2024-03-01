@@ -79,7 +79,15 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             let len = decode_len(decode::read_uint(r, major)?)?;
             let dict = PyDict::new(py);
             for _ in 0..len {
-                let key = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
+                // DAG-CBOR keys are always strings
+                let key_major = decode::read_major(r)?;
+                if key_major.kind() != MajorKind::TextString {
+                    return Err(anyhow::anyhow!("Map keys must be strings"));
+                }
+
+                let key_len = decode::read_uint(r, key_major)?;
+                let key = decode::read_str(r, key_len)?.to_object(py);
+
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
 
                 if dict.get_item(&key)?.is_some() {
