@@ -53,6 +53,36 @@ fn decode_len(len: u64) -> Result<usize> {
     Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
 }
 
+fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
+    - If two keys have different lengths, the shorter one sorts earlier;
+    - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
+     */
+    if a.len() != b.len() {
+        a.len().cmp(&b.len())
+    } else {
+        a.cmp(b)
+    }
+}
+
+fn sort_map_keys(keys: &PySequence, len: usize) -> Vec<(&str, usize)> {
+    // Returns key and index.
+    let mut keys_str = Vec::with_capacity(len);
+    for i in 0..len {
+        let key: &PyString = keys.get_item(i).unwrap().downcast().unwrap();
+        keys_str.push((key.to_str().unwrap(), i));
+    }
+
+    keys_str.sort_by(|a, b| {
+        let (s1, _) = a;
+        let (s2, _) = b;
+
+        map_key_cmp(s1, s2)
+    });
+
+    keys_str
+}
+
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usize) -> Result<PyObject> {
     let major = decode::read_major(r)?;
     let py_object = match major.kind() {
@@ -78,6 +108,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
         MajorKind::Map => {
             let len = decode_len(decode::read_uint(r, major)?)?;
             let dict = PyDict::new(py);
+
+            let mut prev_key: Option<String> = None;
             for _ in 0..len {
                 // DAG-CBOR keys are always strings
                 let key_major = decode::read_major(r)?;
@@ -86,15 +118,22 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
                 }
 
                 let key_len = decode::read_uint(r, key_major)?;
-                let key = decode::read_str(r, key_len)?.to_object(py);
+                let key = decode::read_str(r, key_len)?;
 
-                let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
+                if let Some(prev_key) = prev_key {
+                    if map_key_cmp(&prev_key, &key) == std::cmp::Ordering::Greater {
+                        return Err(anyhow::anyhow!("Map keys must be sorted"));
+                    }
+                }
 
-                if dict.get_item(&key)?.is_some() {
+                let key_py = key.to_object(py);
+                prev_key = Some(key);
+                if dict.get_item(&key_py)?.is_some() {
                     return Err(anyhow::anyhow!("Duplicate keys are not allowed"));
                 }
 
-                dict.set_item(key, value).unwrap();
+                let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
+                dict.set_item(key_py, value).unwrap();
             }
             dict.into()
         }
@@ -177,9 +216,12 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
 
         encode::write_u64(w, MajorKind::Map, len as u64)?;
 
-        // FIXME (MarshalX): care about the order of keys?
-        for i in 0..len {
-            encode_dag_cbor_from_pyobject(py, keys.get_item(i)?, w)?;
+        let sorted_keys = sort_map_keys(&keys, len);
+        for (key, i) in sorted_keys {
+            let key_buf = key.as_bytes();
+            encode::write_u64(w, MajorKind::TextString, key_buf.len() as u64)?;
+            w.write_all(key_buf)?;
+
             encode_dag_cbor_from_pyobject(py, values.get_item(i)?, w)?;
         }
 

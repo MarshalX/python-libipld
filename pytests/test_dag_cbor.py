@@ -42,6 +42,36 @@ def test_dag_cbor_decode_non_string_key_error() -> None:
     assert 'Map keys must be strings' in str(exc_info.value)
 
 
+def test_dag_cbor_decode_wrong_keys_order_lexical_error() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        # {"def": 1, "abc": 2} (same key lengths, wrong sort order)
+        libipld.decode_dag_cbor(bytes.fromhex('a263646566016361626302'))
+
+    assert 'Map keys must be sorted' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_wrong_keys_order_length_error() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        # {"aaa": 1, "x": 2} (different key lengths, wrong sort order)
+        libipld.decode_dag_cbor(bytes.fromhex('a26361616101617802'))
+
+    assert 'Map keys must be sorted' in str(exc_info.value)
+
+
+def test_dag_cbor_encode_wrong_keys_order_error() -> None:
+    obj = {'aaa': 1, 'x': 2}
+    obj2 = {'x': 2, 'aaa': 1}
+
+    encoded = libipld.encode_dag_cbor(obj)
+    encoded2 = libipld.encode_dag_cbor(obj2)
+
+    assert encoded == encoded2
+    assert b'\xa2ax\x02caaa\x01' == encoded
+    assert b'\xa2caaa\x01ax\x02' != encoded
+    assert b'\xa2ax\x02caaa\x01' == encoded2
+    assert b'\xa2caaa\x01ax\x02' != encoded2
+
+
 @pytest.mark.parametrize('data', load_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode(benchmark, data) -> None:
     _dag_cbor_encode(benchmark, data)
