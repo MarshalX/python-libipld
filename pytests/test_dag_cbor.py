@@ -26,6 +26,14 @@ def _dag_cbor_roundtrip(benchmark, data) -> None:
     assert obj == decoded, f'{obj} != {decoded}'
 
 
+def test_dag_cbor_decode_duplicate_keys() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        # {"abc": 1, "abc": 2}
+        libipld.decode_dag_cbor(bytes.fromhex('a263616263016361626302'))
+
+    assert 'Duplicate keys are not allowed' in str(exc_info.value)
+
+
 @pytest.mark.parametrize('data', load_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode(benchmark, data) -> None:
     _dag_cbor_encode(benchmark, data)

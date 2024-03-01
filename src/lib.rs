@@ -79,9 +79,13 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             let len = decode_len(decode::read_uint(r, major)?)?;
             let dict = PyDict::new(py);
             for _ in 0..len {
-                // FIXME (MarshalX): we should raise on duplicate keys?
                 let key = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
+
+                if dict.get_item(&key)?.is_some() {
+                    return Err(anyhow::anyhow!("Duplicate keys are not allowed"));
+                }
+
                 dict.set_item(key, value).unwrap();
             }
             dict.into()
@@ -89,7 +93,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
         MajorKind::Tag => {
             let value = decode::read_uint(r, major)?;
             if value != 42 {
-                return Err(anyhow::anyhow!("non-42 tags are not supported"));
+                return Err(anyhow::anyhow!("Non-42 tags are not supported"));
             }
 
             decode::read_link(r)?.to_string().to_object(py)
@@ -100,7 +104,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             cbor::NULL => py.None(),
             cbor::F32 => (decode::read_f32(r)? as f64).to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
-            _ => return Err(anyhow::anyhow!(format!("unsupported major type"))),
+            _ => return Err(anyhow::anyhow!(format!("Unsupported major type"))),
         },
     };
     Ok(py_object)
