@@ -40,7 +40,10 @@ classifiers = [
 dev = ["pytest", "pytest-benchmark", "pytest-codspeed"]
 
 [tool.pytest.ini_options]
-addopts = "--benchmark-disable"
+addopts = [
+    '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',
+    '--benchmark-disable',  # use --benchmark-enable
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
