@@ -1,0 +1,29 @@
+name: CodSpeed benchmarks
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+  workflow_dispatch: # allows CodSpeed to trigger backtest
+
+permissions:
+  contents: read
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"  # use the latest version of Python because it is faster
+
+      - name: Install dependencies.
+        run: pip install ".[dev]"
+
+      - name: Run benchmarks.
+        uses: CodSpeedHQ/action@v2
+        with:
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: pytest . --codspeed
