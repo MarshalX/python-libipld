@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.12"  # use the latest version of Python because it is faster
 
+      - name: Install python dependencies.
+        run: pip install pytest==8.0.2 pytest-benchmark==4.0.0 pytest-codspeed==2.2.0
+
       - name: Install rust stable.
         id: rust-toolchain
         uses: dtolnay/rust-toolchain@stable
