@@ -8,6 +8,7 @@ from conftest import load_cbor_data_fixtures, load_json_data_fixtures
 _ROUNDTRIP_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'roundtrip')
 _REAL_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 _FIXTURES_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'fixtures')
+_CIDS_DAG_CBOR_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'torture_cids.dag-cbor')
 
 
 def _dag_cbor_encode(benchmark, data) -> None:
@@ -103,3 +104,8 @@ def test_dag_cbor_decode_real_data(benchmark, data) -> None:
 @pytest.mark.parametrize('data', load_cbor_data_fixtures(_FIXTURES_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
     _dag_cbor_decode(benchmark, data)
+
+
+def test_dag_cbor_decode_torture_cids(benchmark) -> None:
+    dag_cbor = open(_CIDS_DAG_CBOR_PATH, 'rb').read()
+    benchmark(libipld.decode_dag_cbor, dag_cbor)

@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.request
 from typing import Any, List, Tuple
 
 
@@ -32,3 +33,15 @@ def load_cbor_data_fixtures(dir_path: str) -> List[Tuple[str, Any]]:
             fixtures.append((os.path.basename(root), fixture))
 
     return fixtures
+
+
+def load_car_fixture(did: str, path: str) -> bytes:
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            return f.read()
+
+    contents = urllib.request.urlopen(f'https://bsky.network/xrpc/com.atproto.sync.getRepo?did={did}').read()
+    with open(path, 'wb') as f:
+        f.write(contents)
+
+    return contents
