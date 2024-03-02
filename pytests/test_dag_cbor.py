@@ -3,10 +3,11 @@ import os
 import libipld
 import pytest
 
-from conftest import load_data_fixtures
+from conftest import load_cbor_data_fixtures, load_json_data_fixtures
 
 _ROUNDTRIP_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'roundtrip')
 _REAL_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
+_FIXTURES_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'fixtures')
 
 
 def _dag_cbor_encode(benchmark, data) -> None:
@@ -15,6 +16,13 @@ def _dag_cbor_encode(benchmark, data) -> None:
     encoded = benchmark(libipld.encode_dag_cbor, obj)
 
     assert isinstance(encoded, bytes)
+
+
+def _dag_cbor_decode(benchmark, data) -> None:
+    _, fixture = data
+    dag_cbor = fixture.get('dag-cbor')
+
+    benchmark(libipld.decode_dag_cbor, dag_cbor)
 
 
 def _dag_cbor_roundtrip(benchmark, data) -> None:
@@ -72,21 +80,26 @@ def test_dag_cbor_encode_wrong_keys_order_error() -> None:
     assert b'\xa2caaa\x01ax\x02' != encoded2
 
 
-@pytest.mark.parametrize('data', load_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
+@pytest.mark.parametrize('data', load_json_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode(benchmark, data) -> None:
     _dag_cbor_encode(benchmark, data)
 
 
-@pytest.mark.parametrize('data', load_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
+@pytest.mark.parametrize('data', load_json_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_decode(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
 
 
-@pytest.mark.parametrize('data', load_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
+@pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode_real_data(benchmark, data) -> None:
     _dag_cbor_encode(benchmark, data)
 
 
-@pytest.mark.parametrize('data', load_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
+@pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_decode_real_data(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
+
+
+@pytest.mark.parametrize('data', load_cbor_data_fixtures(_FIXTURES_DATA_DIR), ids=lambda data: data[0])
+def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
+    _dag_cbor_decode(benchmark, data)

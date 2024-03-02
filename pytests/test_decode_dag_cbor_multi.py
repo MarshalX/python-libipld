@@ -3,14 +3,14 @@ import os
 import libipld
 import pytest
 
-from conftest import load_data_fixtures
+from conftest import load_json_data_fixtures
 
 
 _ROUNDTRIP_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'roundtrip')
 
 
 def combined_data():
-    data = load_data_fixtures(_ROUNDTRIP_DATA_DIR)
+    data = load_json_data_fixtures(_ROUNDTRIP_DATA_DIR)
 
     result = []
 
