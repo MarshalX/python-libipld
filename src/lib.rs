@@ -86,8 +86,8 @@ fn sort_map_keys(keys: &PySequence, len: usize) -> Vec<(&str, usize)> {
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usize) -> Result<PyObject> {
     let major = decode::read_major(r)?;
     let py_object = match major.kind() {
-        MajorKind::UnsignedInt => (decode::read_uint(r, major)? as i128).to_object(py),
-        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i128).to_object(py),
+        MajorKind::UnsignedInt => (decode::read_uint(r, major)?).to_object(py),
+        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
             PyBytes::new(py, &decode::read_bytes(r, len)?).into()
@@ -149,7 +149,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             cbor::FALSE => false.to_object(py),
             cbor::TRUE => true.to_object(py),
             cbor::NULL => py.None(),
-            cbor::F32 => (decode::read_f32(r)? as f64).to_object(py),
+            cbor::F32 => (decode::read_f32(r)?).to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
             _ => return Err(anyhow::anyhow!(format!("Unsupported major type"))),
         },
@@ -182,18 +182,12 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
 
         Ok(())
     } else if obj.is_instance_of::<PyInt>() {
-        let i: i128 = obj.extract()?;
+        let i: i64 = obj.extract()?;
 
-        if i < 0 {
-            if -(i + 1) > u64::MAX as i128 {
-                return Err(NumberOutOfRange::new::<i128>().into());
-            }
-            encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?;
+        if i.is_negative() {
+            encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?
         } else {
-            if i > u64::MAX as i128 {
-                return Err(NumberOutOfRange::new::<i128>().into());
-            }
-            encode::write_u64(w, MajorKind::UnsignedInt, i as u64)?;
+            encode::write_u64(w, MajorKind::UnsignedInt, i as u64)?
         }
 
         Ok(())
