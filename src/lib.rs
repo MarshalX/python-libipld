@@ -1,7 +1,7 @@
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
-use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
+use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag, UnexpectedEof};
 use ::libipld::cid::Cid;
 use anyhow::Result;
 use byteorder::{BigEndian, ByteOrder};
@@ -83,6 +83,34 @@ fn sort_map_keys(keys: &PySequence, len: usize) -> Vec<(&str, usize)> {
     keys_str
 }
 
+
+fn read_bytes<R: Read>(r: &mut R, len: u64) -> Result<Vec<u8>> {
+    let mut len = usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?;
+    let mut buf: Vec<u8> = Vec::with_capacity(len.min(16 * 1024));
+
+    let mut read_len = len;
+    while read_len != 0 {
+        let n = read_len.min(16 * 1024);
+
+        let mut chunk = vec![0; n];
+        r.read_exact(&mut chunk)?;
+        buf.extend_from_slice(&chunk);
+
+        read_len -= n;
+    }
+
+    if buf.len() != len {
+        return Err(UnexpectedEof.into());
+    }
+
+    Ok(buf)
+}
+
+fn read_str<R: Read>(r: &mut R, len: u64) -> Result<String> {
+    let bytes = read_bytes(r, len)?;
+    Ok(String::from_utf8(bytes)?)
+}
+
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usize) -> Result<PyObject> {
     let major = decode::read_major(r)?;
     let py_object = match major.kind() {
@@ -90,11 +118,11 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
         MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
-            PyBytes::new(py, &decode::read_bytes(r, len)?).into()
+            PyBytes::new(py, &read_bytes(r, len)?).into()
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            decode::read_str(r, len)?.to_object(py)
+            read_str(r, len)?.to_object(py)
         }
         MajorKind::Array => {
             let len = decode_len(decode::read_uint(r, major)?)?;
@@ -118,7 +146,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
                 }
 
                 let key_len = decode::read_uint(r, key_major)?;
-                let key = decode::read_str(r, key_len)?;
+                let key = read_str(r, key_len)?;
 
                 if let Some(prev_key) = prev_key {
                     if map_key_cmp(&prev_key, &key) == std::cmp::Ordering::Greater {
