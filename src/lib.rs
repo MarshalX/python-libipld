@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
@@ -53,15 +54,15 @@ fn decode_len(len: u64) -> Result<usize> {
     Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
 }
 
-fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+fn map_key_cmp(a: &str, b: &str) -> Ordering {
     /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
     - If two keys have different lengths, the shorter one sorts earlier;
     - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
      */
-    if a.len() != b.len() {
-        a.len().cmp(&b.len())
-    } else {
-        a.cmp(b)
+    match a.len().cmp(&b.len()) {
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Less => Ordering::Less,
+        Ordering::Equal => a.cmp(b),
     }
 }
 
