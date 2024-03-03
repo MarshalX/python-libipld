@@ -146,9 +146,9 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             decode::read_link(r)?.to_string().to_object(py)
         }
         MajorKind::Other => match major {
-            cbor::FALSE => false.to_object(py),
-            cbor::TRUE => true.to_object(py),
-            cbor::NULL => py.None(),
+            cbor::FALSE => PyBool::new_bound(py, false).to_object(py),
+            cbor::TRUE => PyBool::new_bound(py, true).to_object(py),
+            cbor::NULL => PyNone::get_bound(py).to_object(py),
             cbor::F32 => (decode::read_f32(r)? as f64).to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
             _ => return Err(anyhow::anyhow!(format!("Unsupported major type"))),
