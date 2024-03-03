@@ -10,5 +10,5 @@ libipld = { path = ".." }
 structopt = "0.3.26"
 clap = "4.5.1"
 
-[dependencies.pyo3]
-version = "0.20"
+#[dependencies.pyo3]
+#version = "0.20"
