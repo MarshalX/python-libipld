@@ -20,7 +20,6 @@ futures = "0.3"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }
 iroh-car = "0.4.0"
 multibase = "0.9"
-byteorder = "1.5.0"
 
 [workspace]
 members = [ "profiling" ]

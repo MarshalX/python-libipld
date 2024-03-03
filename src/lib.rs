@@ -4,7 +4,6 @@ use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cid::Cid;
 use anyhow::Result;
-use byteorder::{BigEndian, ByteOrder};
 use futures::{executor, stream::StreamExt};
 use iroh_car::{CarHeader, CarReader, Error as CarError};
 use pyo3::{PyObject, Python};
@@ -228,9 +227,8 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
             return Err(NumberOutOfRange::new::<f64>().into());
         }
 
-        let mut buf = [0xfb, 0, 0, 0, 0, 0, 0, 0, 0];
-        BigEndian::write_f64(&mut buf[1..], v);
-        w.write_all(&buf)?;
+        let [x0, x1, x2, x3, x4, x5, x6, x7] = v.to_be_bytes();
+        w.write_all(&[0xfb, x0, x1, x2, x3, x4, x5, x6, x7])?;
 
         Ok(())
     } else if obj.is_instance_of::<PyBytes>() {
