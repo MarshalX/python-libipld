@@ -11,6 +11,7 @@ use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::*;
+use pyo3::pybacked::PyBackedStr;
 
 fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> Bound<'py, PyDict> {
     let dict_obj = PyDict::new_bound(py);
@@ -65,13 +66,14 @@ fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-fn sort_map_keys(keys: Bound<PySequence>, len: usize) -> Vec<(String, usize)> {
+fn sort_map_keys(keys: Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usize)> {
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
     for i in 0..len {
         let item = keys.get_item(i).unwrap();
-        let key = item.downcast::<PyString>().unwrap();
-        keys_str.push((key.to_str().unwrap().to_string(), i));
+        let key = item.downcast::<PyString>().unwrap().to_owned();
+        let backed_str = PyBackedStr::try_from(key).unwrap();
+        keys_str.push((backed_str, i));
     }
 
     keys_str.sort_by(|a, b| {  // sort_unstable_by performs bad
