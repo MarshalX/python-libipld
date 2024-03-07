@@ -3,30 +3,18 @@ use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cid::Cid;
+use ::libipld::cid::Version;
+use ::libipld::cid::Result as CidResult;
+use ::libipld::cid::Error as CidError;
 use anyhow::Result;
 use byteorder::{BigEndian, ByteOrder};
-use futures::{executor, stream::StreamExt};
-use iroh_car::{CarHeader, CarReader, Error as CarError};
 use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::*;
+use leb128;
+use multihash::{Multihash};
 
-fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> &'py PyDict {
-    let dict_obj = PyDict::new(py);
-
-    dict_obj.set_item("version", header.version()).unwrap();
-
-    let roots = PyList::empty(py);
-    header.roots().iter().for_each(|cid| {
-        let cid_obj = cid.to_string().to_object(py);
-        roots.append(cid_obj).unwrap();
-    });
-
-    dict_obj.set_item("roots", roots).unwrap();
-
-    dict_obj.into()
-}
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> &'py PyDict {
     let hash = cid.hash();
@@ -287,30 +275,54 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyL
     Ok(decoded_parts)
 }
 
-#[pyfunction]
-pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(&'py PyDict, &'py PyDict)> {
-    let car_response = executor::block_on(CarReader::new(data));
-    if let Err(e) = car_response {
-        return Err(get_err("Failed to decode CAR", e.to_string()));
+fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
+    let version = leb128::read::unsigned(r).unwrap();
+    let codec = leb128::read::unsigned(r).unwrap();
+
+    if [version, codec] == [0x12, 0x20] {
+        let mut digest = [0u8; 32];
+        r.read_exact(&mut digest)?;
+        let mh = Multihash::wrap(version, &digest).expect("Digest is always 32 bytes.");
+        return Cid::new_v0(mh);
     }
 
-    let car = car_response.unwrap();
+    let version = Version::try_from(version)?;
+    match version {
+        Version::V0 => Err(CidError::InvalidCidVersion),
+        Version::V1 => {
+            let mh = Multihash::read(r)?;
+            Cid::new(version, codec, mh)
+        }
+    }
+}
 
-    let header = car_header_to_pydict(py, car.header());
+#[pyfunction]
+pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, &'py PyDict)> {
+    let buf = &mut BufReader::new(Cursor::new(data));
+
+    leb128::read::unsigned(buf).unwrap();
+    let header = decode_dag_cbor_to_pyobject(py, buf, 0).unwrap();
     let parsed_blocks = PyDict::new(py);
 
-    let blocks: Vec<Result<(Cid, Vec<u8>), CarError>> = executor::block_on(car.stream().collect());
-    blocks.into_iter().for_each(|block| {
-        if let Ok((cid, bytes)) = block {
-            let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(bytes)), 0);
-            if let Ok(py_object) = py_object {
-                let key = cid.to_string().to_object(py);
-                parsed_blocks.set_item(key, py_object).unwrap();
-            }
+    loop {
+        if let Err(_) = leb128::read::unsigned(buf) {
+            break;
         }
-    });
 
-    Ok((header, parsed_blocks))
+        let cid = read_cid_from_bytes(buf);
+        if let Err(_) = cid {
+            break;
+        }
+
+        let block = decode_dag_cbor_to_pyobject(py, buf, 0);
+        if let Ok(block) = block {
+            parsed_blocks.set_item(cid.unwrap().to_string().to_object(py), block).unwrap();
+        } else {
+            break;
+        }
+    }
+
+    Ok((header.into(), parsed_blocks))
 }
 
 #[pyfunction]

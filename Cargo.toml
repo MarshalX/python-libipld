@@ -16,11 +16,11 @@ crate-type = ["rlib", "cdylib"]
 pyo3 = { version = "0.20", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.7"
 anyhow = "1.0.75"
-futures = "0.3"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }
-iroh-car = "0.4.0"
 multibase = "0.9"
 byteorder = "1.5.0"
+leb128 = "0.2.1"
+multihash = "0.18.1"
 
 [workspace]
 members = [ "profiling" ]
