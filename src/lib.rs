@@ -12,7 +12,6 @@ use pyo3::{PyObject, Python};
 use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::*;
-use leb128;
 use multihash::{Multihash};
 
 
@@ -275,9 +274,32 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<&'py PyL
     Ok(decoded_parts)
 }
 
+#[inline]
+fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
+    let mut result = 0;
+    let mut shift = 0;
+
+    loop {
+        let mut buf = [0];
+        if let Err(_) = r.read_exact(&mut buf) {
+            return Err(anyhow::anyhow!("Unexpected EOF while reading ULEB128 number."));
+        }
+
+        let byte = buf[0] as u64;
+        if (byte & 0x80) == 0 {
+            result |= (byte) << shift;
+            return Ok(result);
+        } else {
+            result |= (byte & 0x7F) << shift;
+        }
+
+        shift += 7;
+    }
+}
+
 fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
-    let version = leb128::read::unsigned(r).unwrap();
-    let codec = leb128::read::unsigned(r).unwrap();
+    let version = read_u64_leb128(r).unwrap();
+    let codec = read_u64_leb128(r).unwrap();
 
     if [version, codec] == [0x12, 0x20] {
         let mut digest = [0u8; 32];
@@ -300,12 +322,12 @@ fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
 pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, &'py PyDict)> {
     let buf = &mut BufReader::new(Cursor::new(data));
 
-    leb128::read::unsigned(buf).unwrap();
+    let _ = read_u64_leb128(buf);
     let header = decode_dag_cbor_to_pyobject(py, buf, 0).unwrap();
     let parsed_blocks = PyDict::new(py);
 
     loop {
-        if let Err(_) = leb128::read::unsigned(buf) {
+        if let Err(_) = read_u64_leb128(buf) {
             break;
         }
 

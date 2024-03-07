@@ -19,7 +19,6 @@ anyhow = "1.0.75"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }
 multibase = "0.9"
 byteorder = "1.5.0"
-leb128 = "0.2.1"
 multihash = "0.18.1"
 
 [workspace]
