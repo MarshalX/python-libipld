@@ -36,9 +36,6 @@ classifiers = [
 "Tracker" = "https://github.com/MarshalX/python-libipld/issues"
 "Author" = "https://github.com/MarshalX"
 
-[project.optional-dependencies]
-dev = ["pytest", "pytest-benchmark", "pytest-codspeed"]
-
 [tool.pytest.ini_options]
 addopts = [
     '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',
