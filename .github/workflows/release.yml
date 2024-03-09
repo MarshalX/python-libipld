@@ -154,10 +154,10 @@ jobs:
       - name: Gather PGO data.
         run: |
           pip install -U pip
-          pip install ".[dev]"
+          pip install -r pytests/requirements.txt 
 
           pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
-          pytest . --benchmark-enable -n auto
+          pytest . --benchmark-enable
 
           # we can't use github.workspace here because of Windows with backslashes
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'

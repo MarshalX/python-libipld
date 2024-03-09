@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"  # use the latest version of Python because it is faster
 
       - name: Install python dependencies.
-        run: pip install ".[dev]"
+        run: pip install -r pytests/requirements.txt
 
       - name: Install rust stable.
         id: rust-toolchain
@@ -37,7 +37,7 @@ jobs:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
 
       - name: Gather PGO data.
-        run: pytest . --benchmark-enable -n auto
+        run: pytest . --benchmark-enable
 
       - name: Prepare merged PGO data.
         run: rustup run stable bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
