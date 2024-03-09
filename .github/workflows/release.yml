@@ -155,7 +155,7 @@ jobs:
       - name: Gather PGO data.
         run: |
           pip install -U pip
-          pip install pytest==7.4.4 pytest-benchmark==4.0.0 pytest-xdist==3.5.0
+          pip install ".[dev]"
 
           pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
           pytest . --benchmark-enable -n auto
