@@ -2,17 +2,13 @@ use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
-use ::libipld::cid::Cid;
-use ::libipld::cid::Version;
-use ::libipld::cid::Result as CidResult;
-use ::libipld::cid::Error as CidError;
-use anyhow::Result;
+use ::libipld::cid::{Cid, Version, Result as CidResult, Error as CidError};
+use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
+use multihash::Multihash;
 use pyo3::{PyObject, Python};
-use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::types::*;
-use multihash::{Multihash};
 
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> &'py PyDict {
@@ -101,7 +97,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
                 // DAG-CBOR keys are always strings
                 let key_major = decode::read_major(r)?;
                 if key_major.kind() != MajorKind::TextString {
-                    return Err(anyhow::anyhow!("Map keys must be strings"));
+                    return Err(anyhow!("Map keys must be strings"));
                 }
 
                 let key_len = decode::read_uint(r, key_major)?;
@@ -109,14 +105,14 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
 
                 if let Some(prev_key) = prev_key {
                     if map_key_cmp(&prev_key, &key) == std::cmp::Ordering::Greater {
-                        return Err(anyhow::anyhow!("Map keys must be sorted"));
+                        return Err(anyhow!("Map keys must be sorted"));
                     }
                 }
 
                 let key_py = key.to_object(py);
                 prev_key = Some(key);
                 if dict.get_item(&key_py)?.is_some() {
-                    return Err(anyhow::anyhow!("Duplicate keys are not allowed"));
+                    return Err(anyhow!("Duplicate keys are not allowed"));
                 }
 
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
@@ -127,7 +123,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
         MajorKind::Tag => {
             let value = decode::read_uint(r, major)?;
             if value != 42 {
-                return Err(anyhow::anyhow!("Non-42 tags are not supported"));
+                return Err(anyhow!("Non-42 tags are not supported"));
             }
 
             decode::read_link(r)?.to_string().to_object(py)
@@ -138,7 +134,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
             cbor::NULL => py.None(),
             cbor::F32 => (decode::read_f32(r)?).to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
-            _ => return Err(anyhow::anyhow!(format!("Unsupported major type"))),
+            _ => return Err(anyhow!(format!("Unsupported major type"))),
         },
     };
     Ok(py_object)
@@ -253,7 +249,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &'py PyAny
             Ok(())
         }
     } else {
-        return Err(UnknownTag(0).into());
+        Err(UnknownTag(0).into())
     }
 }
 
@@ -282,7 +278,7 @@ fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
     loop {
         let mut buf = [0];
         if let Err(_) = r.read_exact(&mut buf) {
-            return Err(anyhow::anyhow!("Unexpected EOF while reading ULEB128 number."));
+            return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
         }
 
         let byte = buf[0] as u64;
@@ -345,6 +341,35 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, &'py
     }
 
     Ok((header.into(), parsed_blocks))
+}
+
+#[pyfunction]
+pub fn decode_car_tuple<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, PyObject)> {
+    let buf = &mut BufReader::new(Cursor::new(data));
+
+    let _ = read_u64_leb128(buf);
+    let header = decode_dag_cbor_to_pyobject(py, buf, 0).unwrap();
+    let mut elements: Vec<(&'py PyDict, Py<PyAny>)> = Vec::new();
+
+    loop {
+        if let Err(_) = read_u64_leb128(buf) {
+            break;
+        }
+
+        let cid = read_cid_from_bytes(buf);
+        if let Ok(cid) = cid {
+            let block = decode_dag_cbor_to_pyobject(py, buf, 0);
+            if let Ok(block) = block {
+                elements.push((cid_to_pydict(py, &(cid)), block));
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    Ok((header.into(), PyTuple::new(py, elements).into()))
 }
 
 #[pyfunction]
@@ -421,6 +446,7 @@ fn get_err(msg: &str, err: String) -> PyErr {
 fn libipld(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(decode_car, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_car_tuple, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
     m.add_function(wrap_pyfunction!(encode_dag_cbor, m)?)?;
     m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;

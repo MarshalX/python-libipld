@@ -27,3 +27,13 @@ def test_decode_car(benchmark, car) -> None:
     assert all(len(k) == 59 for k in blocks.keys())
     assert all(isinstance(v, dict) for v in blocks.values())
     assert all(v for v in blocks.values())  # not empty dict
+
+
+def test_decode_car_tuple(benchmark, car) -> None:
+    header, blocks = benchmark(libipld.decode_car_tuple, car)
+
+    assert 1 == header['version']
+    assert isinstance(header['roots'], list)
+    assert 1 == len(header['roots'])
+
+    assert isinstance(blocks, tuple)
