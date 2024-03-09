@@ -109,16 +109,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-12, macos-14 ]
-        interpreter: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
-        exclude:
-          - os: macos-14
-            interpreter: '3.7'
-          # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
-          - os: macos-14
-            interpreter: '3.8'
-          - os: macos-14
-            interpreter: '3.9'
+        os: [ ubuntu-latest ]
+        #        os: [ ubuntu-latest, windows-latest, macos-12, macos-14 ]
+        interpreter: [ '3.7' ]
+    #        interpreter: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
+    #        exclude:
+    #          - os: macos-14
+    #            interpreter: '3.7'
+    #          # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
+    #          - os: macos-14
+    #            interpreter: '3.8'
+    #          - os: macos-14
+    #            interpreter: '3.9'
 
     runs-on: ${{ matrix.os }}
 
@@ -162,6 +164,12 @@ jobs:
 
           # we can't use github.workspace here because of Windows with backslashes
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
+
+      - name: List profdata files.
+        run: |
+          ls -lh profdata/
+          ls -l profdata/
+          echo "`ls profdata | wc -l` files"
 
       - name: Prepare merged PGO data.
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata
