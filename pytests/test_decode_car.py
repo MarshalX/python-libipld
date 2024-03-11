@@ -35,13 +35,13 @@ def test_decode_car_invalid_header_len() -> None:
     assert 'Invalid uvarint' in str(exc_info.value)
 
 
-def test_decode_car_invalid_header() -> None:
-    with pytest.raises(ValueError) as exc_info:
+def test_decode_car_invalid_header_type() -> None:
+    with pytest.raises(TypeError) as exc_info:
         header_len = bytes.fromhex('33')  # 3
         header_obj = libipld.encode_dag_cbor('strInsteadOfObj')
         libipld.decode_car(header_len + header_obj)
 
-    assert 'Header is not a object' in str(exc_info.value)
+    assert "cannot be converted to 'PyDict'" in str(exc_info.value)
 
 
 def test_decode_car_invalid_header_version_key() -> None:

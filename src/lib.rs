@@ -353,15 +353,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
         ));
     };
 
-    if !header_obj.bind(py).is_instance_of::<PyDict>() {
-        return Err(get_err(
-            "Failed to read CAR header",
-            "Header is not a object".to_string(),
-        ));
-    }
-
-    let header = header_obj.downcast_bound::<PyDict>(py).unwrap();
-
+    let header = header_obj.downcast_bound::<PyDict>(py)?;
     let Some(version) = header.get_item("version")? else {
         return Err(get_err(
             "Failed to read CAR header",
@@ -397,7 +389,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
 
     loop {
         if let Err(_) = read_u64_leb128(buf) {
-            // we are not raising an error here because of possible EOF
+            // FIXME (MarshalX): we are not raising an error here because of possible EOF
             break;
         }
 
