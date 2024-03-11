@@ -331,7 +331,7 @@ fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
 #[pyfunction]
 fn encode_dag_cbor<'py>(py: Python<'py>, data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBytes>> {
     let mut buf = &mut BufWriter::new(Vec::new());
-    if let Err(e) = encode_dag_cbor_from_pyobject(py, &data, &mut buf) {
+    if let Err(e) = encode_dag_cbor_from_pyobject(py, data, &mut buf) {
         return Err(get_err("Failed to encode DAG-CBOR", e.to_string()));
     }
     if let Err(e) = buf.flush() {
