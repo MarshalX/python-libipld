@@ -345,7 +345,6 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
             "Invalid uvarint".to_string(),
         ));
     }
-
     let Ok(header_obj) = decode_dag_cbor_to_pyobject(py, buf, 0) else {
         return Err(get_err(
             "Failed to read CAR header",
@@ -354,13 +353,13 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
     };
 
     let header = header_obj.downcast_bound::<PyDict>(py)?;
+
     let Some(version) = header.get_item("version")? else {
         return Err(get_err(
             "Failed to read CAR header",
             "Version is None".to_string(),
         ));
     };
-
     if version.downcast::<PyInt>()?.extract::<u64>()? != 1 {
         return Err(get_err(
             "Failed to read CAR header",
@@ -374,9 +373,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
             "Roots is None".to_string(),
         ));
     };
-
-    let roots = roots.downcast::<PyList>()?;
-    if roots.len() == 0 {
+    if roots.downcast::<PyList>()?.len() == 0 {
         return Err(get_err(
             "Failed to read CAR header",
             "Roots is empty. Must be at least one".to_string(),
