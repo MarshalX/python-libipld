@@ -315,8 +315,12 @@ fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
 }
 
 fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
-    let version = read_u64_leb128(r).unwrap();
-    let codec = read_u64_leb128(r).unwrap();
+    let Ok(version) = read_u64_leb128(r) else {
+        return Err(CidError::VarIntDecodeError);
+    };
+    let Ok(codec) = read_u64_leb128(r) else {
+        return Err(CidError::VarIntDecodeError);
+    };
 
     if [version, codec] == [0x12, 0x20] {
         let mut digest = [0u8; 32];
