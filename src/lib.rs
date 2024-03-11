@@ -2,7 +2,7 @@ use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
-use ::libipld::cid::{Cid, Version, Result as CidResult, Error as CidError};
+use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
@@ -299,9 +299,7 @@ fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
     loop {
         let mut buf = [0];
         if let Err(_) = r.read_exact(&mut buf) {
-            return Err(anyhow!(
-                "Unexpected EOF while reading ULEB128 number."
-            ));
+            return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
         }
 
         let byte = buf[0] as u64;
@@ -341,31 +339,96 @@ fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
 pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Bound<'py, PyDict>)> {
     let buf = &mut BufReader::new(Cursor::new(data));
 
-    let _ = read_u64_leb128(buf);
-    let header = decode_dag_cbor_to_pyobject(py, buf, 0).unwrap();
+    if let Err(_) = read_u64_leb128(buf) {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Invalid uvarint".to_string(),
+        ));
+    }
+
+    let Ok(header_obj) = decode_dag_cbor_to_pyobject(py, buf, 0) else {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Invalid DAG-CBOR".to_string(),
+        ));
+    };
+
+    if !header_obj.bind(py).is_instance_of::<PyDict>() {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Header is not a object".to_string(),
+        ));
+    }
+
+    let header = header_obj.downcast_bound::<PyDict>(py).unwrap();
+
+    let Some(version) = header.get_item("version")? else {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Version is None".to_string(),
+        ));
+    };
+
+    if version.downcast::<PyInt>()?.extract::<u64>()? != 1 {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Unsupported version. Version must be 1".to_string(),
+        ));
+    }
+
+    let Some(roots) = header.get_item("roots")? else {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Roots is None".to_string(),
+        ));
+    };
+
+    let roots = roots.downcast::<PyList>()?;
+    if roots.len() == 0 {
+        return Err(get_err(
+            "Failed to read CAR header",
+            "Roots is empty. Must be at least one".to_string(),
+        ));
+    }
+
+    // FIXME (MarshalX): we are not verifying if the roots are valid CIDs
+
     let parsed_blocks = PyDict::new_bound(py);
 
     loop {
         if let Err(_) = read_u64_leb128(buf) {
+            // we are not raising an error here because of possible EOF
             break;
         }
 
-        let cid = read_cid_from_bytes(buf);
-        if let Err(_) = cid {
-            break;
+        let cid_result = read_cid_from_bytes(buf);
+        let Ok(cid) = cid_result else {
+            return Err(get_err(
+                "Failed to read CID of block",
+                cid_result.unwrap_err().to_string(),
+            ));
+        };
+
+        if cid.codec() != 0x71 {
+            return Err(get_err(
+                "Failed to read CAR block",
+                "Unsupported codec. For now we support only DAG-CBOR (0x71)".to_string(),
+            ));
         }
 
-        let block = decode_dag_cbor_to_pyobject(py, buf, 0);
-        if let Ok(block) = block {
-            parsed_blocks
-                .set_item(cid.unwrap().to_string().to_object(py), block)
-                .unwrap();
-        } else {
-            break;
-        }
+        let block_result = decode_dag_cbor_to_pyobject(py, buf, 0);
+        let Ok(block) = block_result else {
+            return Err(get_err(
+                "Failed to read CAR block",
+                block_result.unwrap_err().to_string(),
+            ));
+        };
+
+        let cid_base = cid.to_string().to_object(py);
+        parsed_blocks.set_item(cid_base, block).unwrap();
     }
 
-    Ok((header, parsed_blocks))
+    Ok((header_obj, parsed_blocks))
 }
 
 #[pyfunction]
