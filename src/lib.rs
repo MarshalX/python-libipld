@@ -15,22 +15,6 @@ use pyo3::types::*;
 use pyo3::pybacked::PyBackedStr;
 use multihash::{Multihash};
 
-fn car_header_to_pydict<'py>(py: Python<'py>, header: &CarHeader) -> Bound<'py, PyDict> {
-    let dict_obj = PyDict::new_bound(py);
-
-    dict_obj.set_item("version", header.version()).unwrap();
-
-    let roots = PyList::empty_bound(py);
-    header.roots().iter().for_each(|cid| {
-        let cid_obj = cid.to_string().to_object(py);
-        roots.append(cid_obj).unwrap();
-    });
-
-    dict_obj.set_item("roots", roots).unwrap();
-
-    dict_obj
-}
-
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
     let dict_obj = PyDict::new_bound(py);
@@ -339,7 +323,7 @@ fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
 }
 
 #[pyfunction]
-pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
+pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Bound<'py, PyDict>)> {
     let buf = &mut BufReader::new(Cursor::new(data));
 
     let _ = read_u64_leb128(buf);
