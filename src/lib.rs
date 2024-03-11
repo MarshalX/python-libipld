@@ -66,7 +66,7 @@ fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-fn sort_map_keys(keys: Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usize)> {
+fn sort_map_keys(keys: &Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usize)> {
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
     for i in 0..len {
@@ -93,21 +93,21 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
         MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
-            PyBytes::new_bound(py, &decode::read_bytes(r, len)?).into()
+            PyBytes::new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            decode::read_str(r, len)?.to_object(py)
+            PyString::new_bound(py, &decode::read_str(r, len)?).to_object(py)
         }
         MajorKind::Array => {
             let len = decode_len(decode::read_uint(r, major)?)?;
             let list = PyList::empty_bound(py);
 
             for _ in 0..len {
-                list.append(decode_dag_cbor_to_pyobject(py, r, deep + 1)?).unwrap();
+                list.append(decode_dag_cbor_to_pyobject(py, r, deep + 1)?)?;
             }
 
-            list.into()
+            list.to_object(py)
         }
         MajorKind::Map => {
             let len = decode_len(decode::read_uint(r, major)?)?;
@@ -140,7 +140,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
                 dict.set_item(key_py, value).unwrap();
             }
 
-            dict.into()
+            dict.to_object(py)
         }
         MajorKind::Tag => {
             let value = decode::read_uint(r, major)?;
@@ -148,13 +148,14 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
                 return Err(anyhow::anyhow!("Non-42 tags are not supported"));
             }
 
-            decode::read_link(r)?.to_string().to_object(py)
+            let cid = decode::read_link(r)?.to_string();
+            PyString::new_bound(py, &cid).to_object(py)
         }
         MajorKind::Other => match major {
             cbor::FALSE => false.to_object(py),
             cbor::TRUE => true.to_object(py),
             cbor::NULL => py.None(),
-            cbor::F32 => (decode::read_f32(r)?).to_object(py),
+            cbor::F32 => decode::read_f32(r)?.to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
             _ => return Err(anyhow::anyhow!(format!("Unsupported major type"))),
         },
@@ -162,7 +163,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(py: Python, r: &mut R, deep: usiz
     Ok(py_object)
 }
 
-fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: Bound<'py, PyAny>, w: &mut W) -> Result<()> {
+fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: &Bound<'py, PyAny>, w: &mut W) -> Result<()> {
     /* Order is important for performance!
 
     Fast checks go first:
@@ -203,14 +204,14 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: Bound<'py,
         encode::write_u64(w, MajorKind::Array, len as u64)?;
 
         for i in 0..len {
-            encode_dag_cbor_from_pyobject(py, seq.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, &seq.get_item(i)?, w)?;
         }
 
         Ok(())
     } else if obj.is_instance_of::<PyDict>() {
         let map = obj.downcast::<PyMapping>().unwrap();
         let len = map.len()?;
-        let keys = sort_map_keys(map.keys()?, len);
+        let keys = sort_map_keys(&map.keys()?, len);
         let values = map.values()?;
 
         encode::write_u64(w, MajorKind::Map, len as u64)?;
@@ -220,7 +221,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: Bound<'py,
             encode::write_u64(w, MajorKind::TextString, key_buf.len() as u64)?;
             w.write_all(key_buf)?;
 
-            encode_dag_cbor_from_pyobject(py, values.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, &values.get_item(i)?, w)?;
         }
 
         Ok(())
@@ -275,7 +276,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(py: Python<'py>, obj: Bound<'py,
 }
 
 #[pyfunction]
-fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<PyObject> {
+fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
     let mut reader = BufReader::new(Cursor::new(data));
     let decoded_parts = PyList::empty_bound(py);
 
@@ -288,11 +289,11 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<PyObject
         }
     }
 
-    Ok(decoded_parts.into())
+    Ok(decoded_parts)
 }
 
 #[pyfunction]
-pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, PyObject)> {
+pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
     let car_response = executor::block_on(CarReader::new(data));
     if let Err(e) = car_response {
         return Err(get_err("Failed to decode CAR", e.to_string()));
@@ -314,7 +315,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, PyOb
         }
     });
 
-    Ok((header.into(), parsed_blocks.into()))
+    Ok((header, parsed_blocks))
 }
 
 #[pyfunction]
@@ -328,7 +329,7 @@ fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
 }
 
 #[pyfunction]
-fn encode_dag_cbor<'py>(py: Python<'py>, data: Bound<'py, PyAny>) -> PyResult<PyObject> {
+fn encode_dag_cbor<'py>(py: Python<'py>, data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBytes>> {
     let mut buf = &mut BufWriter::new(Vec::new());
     if let Err(e) = encode_dag_cbor_from_pyobject(py, data, &mut buf) {
         return Err(get_err("Failed to encode DAG-CBOR", e.to_string()));
@@ -336,31 +337,31 @@ fn encode_dag_cbor<'py>(py: Python<'py>, data: Bound<'py, PyAny>) -> PyResult<Py
     if let Err(e) = buf.flush() {
         return Err(get_err("Failed to flush buffer", e.to_string()));
     }
-    Ok(PyBytes::new_bound(py, &buf.get_ref()).into())
+    Ok(PyBytes::new_bound(py, &buf.get_ref()))
 }
 
 #[pyfunction]
-fn decode_cid(py: Python, data: String) -> PyResult<PyObject> {
-    let cid = Cid::try_from(data.as_str());
+fn decode_cid<'py>(py: Python<'py>, data: &str) -> PyResult<Bound<'py, PyDict>> {
+    let cid = Cid::try_from(data);
     if let Ok(cid) = cid {
-        Ok(cid_to_pydict(py, &cid).into())
+        Ok(cid_to_pydict(py, &cid))
     } else {
         Err(get_err("Failed to decode CID", cid.unwrap_err().to_string()))
     }
 }
 
 #[pyfunction]
-fn decode_multibase(py: Python, data: String) -> PyResult<(char, PyObject)> {
+fn decode_multibase<'py>(py: Python<'py>, data: &str) -> PyResult<(char, Bound<'py, PyBytes>)> {
     let base = multibase::decode(data);
     if let Ok((base, data)) = base {
-        Ok((base.code(), PyBytes::new_bound(py, &data).into()))
+        Ok((base.code(), PyBytes::new_bound(py, &data)))
     } else {
         Err(get_err("Failed to decode multibase", base.unwrap_err().to_string()))
     }
 }
 
 #[pyfunction]
-fn encode_multibase(code: char, data: Bound<PyAny>) -> PyResult<String> {
+fn encode_multibase(code: char, data: &Bound<PyAny>) -> PyResult<String> {
     let data_bytes: &[u8];
     if data.is_instance_of::<PyBytes>() {
         let b = data.downcast::<PyBytes>().unwrap();
