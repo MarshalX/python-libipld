@@ -6,7 +6,6 @@ on:
       - main
     tags:
       - 'v*.*.*'
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -14,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build on ${{ matrix.platform || matrix.os }} (${{ matrix.target }} - ${{ matrix.manylinux || 'auto' }})
+    name: Build on ${{ matrix.os }} (${{ matrix.target }} - ${{ matrix.manylinux || 'auto' }})
     strategy:
       fail-fast: false
       matrix:
@@ -22,50 +21,50 @@ jobs:
         target: [ x86_64, aarch64 ]
         manylinux: [ auto ]
         include:
+          # not PGO optimized:
+
           - os: windows
-            ls: dir
-            interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
+            target: x86_64
+            interpreter: pypy3.9 pypy3.10
           - os: windows
-            ls: dir
             target: i686
             python-architecture: x86
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
           - os: windows
-            ls: dir
             target: aarch64
             interpreter: 3.11 3.12
+
+          - os: macos
+            target: x86_64
+            interpreter: pypy3.8 pypy3.9 pypy3.10
           - os: macos
             target: aarch64
-            interpreter: 3.7 3.8 3.9 3.10 3.11 3.12 pypy3.8 pypy3.9 pypy3.10
+            # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
+            interpreter: 3.7 3.8 3.9 pypy3.8 pypy3.9 pypy3.10
+
           - os: ubuntu
-            platform: linux
+            target: x86_64
+            interpreter: pypy3.9 pypy3.10
           - os: ubuntu
-            platform: linux
             target: i686
           - os: ubuntu
-            platform: linux
             target: aarch64
           - os: ubuntu
-            platform: linux
             target: armv7
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
-          # musllinux
           - os: ubuntu
-            platform: linux
-            target: x86_64
-            manylinux: musllinux_1_1
-          - os: ubuntu
-            platform: linux
-            target: aarch64
-            manylinux: musllinux_1_1
-          - os: ubuntu
-            platform: linux
             target: ppc64le
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
           - os: ubuntu
-            platform: linux
             target: s390x
             interpreter: 3.7 3.8 3.9 3.10 3.11 3.12
+
+          - os: ubuntu
+            target: x86_64
+            manylinux: musllinux_1_1
+          - os: ubuntu
+            target: aarch64
+            manylinux: musllinux_1_1
         exclude:
           # Windows on arm64 only supports Python 3.11+
           - os: windows
@@ -74,7 +73,7 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           architecture: ${{ matrix.python-architecture || 'x64' }}
@@ -95,42 +94,150 @@ jobs:
           rust-toolchain: stable
           docker-options: -e CI
 
-      - run: ${{ matrix.ls || 'ls -lh' }} dist/
-
-      - run: |
-          pip install -U twine
-          twine check --strict dist/*
+      - name: List wheels.
+        run: ${{ (runner.os == 'Windows' && 'dir') || 'ls -lh' }} dist/
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: pypi_wheels_${{ matrix.os }}_${{ matrix.target }}_${{ matrix.interpreter || 'all' }}_${{ matrix.manylinux }}
           path: dist
 
-  sdist:
+  build-pgo:
+    name: PGO build on ${{ matrix.os }} / ${{ matrix.interpreter }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-12, macos-14 ]
+        interpreter: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
+        exclude:
+          - os: macos-14
+            interpreter: '3.7'
+          # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
+          - os: macos-14
+            interpreter: '3.8'
+          - os: macos-14
+            interpreter: '3.9'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Set Git to use LF.
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.interpreter }}
+
+      - name: Install rust stable.
+        id: rust-toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+
+      - name: Set RUST_HOST.
+        shell: bash
+        run: echo RUST_HOST=$(rustc -Vv | grep host | cut -d ' ' -f 2) >> "$GITHUB_ENV"
+
+      - name: Build wheel with profile generation.
+        uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          args: --release --out pgo-wheel --interpreter ${{ matrix.interpreter }}
+          rust-toolchain: stable
+          docker-options: -e CI
+        env:
+          RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
+
+      - name: Gather PGO data.
+        run: |
+          pip install -U pip
+          pip install -r pytests/requirements.txt 
+
+          pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
+          pytest . --benchmark-enable
+
+          # we can't use github.workspace here because of Windows with backslashes
+          rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
+
+      - name: Prepare merged PGO data.
+        run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata
+
+      - name: Build PGO-optimized wheel.
+        uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          args: --release --out dist --interpreter ${{ matrix.interpreter }}
+          rust-toolchain: stable
+          docker-options: -e CI
+        env:
+          RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
+
+      - name: List wheels.
+        run: ${{ (runner.os == 'Windows' && 'dir') || 'ls -lh' }} dist/
+
+      - name: Upload wheels.
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypi_pgo_wheels_${{ matrix.os }}_${{ matrix.interpreter }}
+          path: dist
+
+  build-sdist:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build sdist
+      - name: Build sdist.
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
-      - name: Upload sdist
-        uses: actions/upload-artifact@v3
+      - name: Upload sdist.
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: pypi_sdist
           path: dist
+
+  check:
+    needs: [ build, build-pgo, build-sdist ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Get dist artifacts.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pypi_*
+          merge-multiple: true
+          path: dist
+
+      - name: List dist files.
+        run: |
+          ls -lh dist/
+          ls -l dist/
+          echo "`ls dist | wc -l` files"
+
+      - name: Check wheels.
+        run: |
+          pip install -U twine
+          twine check --strict dist/*
 
   release:
     name: Release
     runs-on: ubuntu-latest
     if: "startsWith(github.ref, 'refs/tags/')"
-    needs: [ build, sdist ]
+    needs: [ build, build-pgo, build-sdist, check ]
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: pypi_*
+          merge-multiple: true
+          path: dist
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
