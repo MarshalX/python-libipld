@@ -124,7 +124,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
 
                 let key_py = key.to_object(py);
                 prev_key = Some(key);
-                if dict.get_item(&key_py)?.is_some() {
+                if dict.contains(&key_py)? == true {
                     return Err(anyhow!("Duplicate keys are not allowed"));
                 }
 
