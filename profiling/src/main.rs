@@ -7,6 +7,7 @@ arg_enum! {
     #[derive(Debug)]
     enum Profile {
         DecodeCar,
+        EncodeDagCbor,
     }
 }
 
@@ -28,5 +29,6 @@ fn main() {
     } = Opt::from_args();
     match profile {
         Profile::DecodeCar => profiles::decode_car::exec(iterations),
+        Profile::EncodeDagCbor => profiles::encode_dag_cbor::exec(iterations),
     }
 }
