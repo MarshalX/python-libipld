@@ -30,11 +30,11 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 
 - Decode DAG-CBOR (`decode_dag_cbor(bytes) -> dict`, `decode_dag_cbor_multi(bytes) -> list[dict]`)
 - Encode DAG-CBOR (`encode_dag_cbor(obj) -> bytes`)
-- Decode CID (`decode_cid(str | bytes) -> dict`). Accepts encoded CID string or raw CID bytes.
-- Encode CID (`decode_cid(bytes) -> str`). Encodes raw CID bytes to multibase.
+- Decode CID (`decode_cid(str | bytes) -> dict`). Accepts CID stringified form or CID raw byte form.
+- Encode CID (`encode_cid(bytes) -> str`). Encodes CID raw byte form to stringified form.
 - Decode Multibase (`decode_multibase(str) -> tuple[str, bytes]`). Returns base and data.
 - Encode Multibase (`encode_multibase(str, bytes) -> str`). Accepts base and data.
-- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[str, dict]]`). Returns a header and blocks mapped by CID. CIDs in raw bytes.
+- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[str, dict]]`). Returns a header and blocks mapped by CID. CIDs in raw byte form.
 
 Note: stub file will be provided in the future.
 
