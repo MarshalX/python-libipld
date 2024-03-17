@@ -75,14 +75,11 @@ fn sort_map_keys(keys: &Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usiz
 }
 
 fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
-    if obj.is_instance_of::<PyBytes>() {
-        let b = obj.downcast::<PyBytes>()?;
+    if let Ok(b) = obj.downcast::<PyBytes>() {
         Ok(b.as_bytes())
-    } else if obj.is_instance_of::<PyByteArray>() {
-        let ba = obj.downcast::<PyByteArray>()?;
+    } else if let Ok(ba) = obj.downcast::<PyByteArray>() {
         Ok(unsafe { ba.as_bytes() })
-    } else if obj.is_instance_of::<PyString>() {
-        let s = obj.downcast::<PyString>()?;
+    } else if let Ok(s) = obj.downcast::<PyString>() {
         Ok(s.to_str()?.as_bytes())
     } else {
         Err(get_err(
@@ -216,19 +213,17 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         }
 
         Ok(())
-    } else if obj.is_instance_of::<PyList>() {
-        let seq = obj.downcast::<PySequence>().unwrap();
-        let len = obj.len()?;
+    } else if let Ok(l) = obj.downcast::<PyList>() {
+        let len = l.len();
 
         encode::write_u64(w, MajorKind::Array, len as u64)?;
 
         for i in 0..len {
-            encode_dag_cbor_from_pyobject(py, &seq.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, &l.get_item(i)?, w)?;
         }
 
         Ok(())
-    } else if obj.is_instance_of::<PyDict>() {
-        let map = obj.downcast::<PyMapping>().unwrap();
+    } else if let Ok(map) = obj.downcast::<PyMapping>() {
         let len = map.len()?;
         let keys = sort_map_keys(&map.keys()?, len);
         let values = map.values()?;
@@ -244,10 +239,8 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         }
 
         Ok(())
-    } else if obj.is_instance_of::<PyFloat>() {
-        let f = obj.downcast::<PyFloat>().unwrap();
+    } else if let Ok(f) = obj.downcast::<PyFloat>() {
         let v = f.value();
-
         if !v.is_finite() {
             return Err(NumberOutOfRange::new::<f64>().into());
         }
@@ -257,9 +250,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         w.write_all(&buf)?;
 
         Ok(())
-    } else if obj.is_instance_of::<PyBytes>() {
-        let b = obj.downcast::<PyBytes>().unwrap();
-
+    } else if let Ok(b) = obj.downcast::<PyBytes>() {
         // FIXME (MarshalX): it's not efficient to try to parse it as CID
         let cid = Cid::try_from(b.as_bytes());
         if let Ok(_) = cid {
@@ -278,8 +269,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         }
 
         Ok(())
-    } else if obj.is_instance_of::<PyString>() {
-        let s = obj.downcast::<PyString>().unwrap();
+    } else if let Ok(s) = obj.downcast::<PyString>() {
         let buf = s.to_str()?.as_bytes();
 
         encode::write_u64(w, MajorKind::TextString, buf.len() as u64)?;
@@ -299,7 +289,7 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'p
     loop {
         let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
         if let Ok(py_object) = py_object {
-            decoded_parts.append(py_object).unwrap();
+            decoded_parts.append(py_object)?;
         } else {
             break;
         }
@@ -436,7 +426,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
 
         // FIXME(MarshalX): to_bytes allocates
         let key = PyBytes::new_bound(py, &cid.to_bytes()).to_object(py);
-        parsed_blocks.set_item(key, block).unwrap();
+        parsed_blocks.set_item(key, block)?;
     }
 
     Ok((header_obj, parsed_blocks))
@@ -473,8 +463,7 @@ pub fn encode_dag_cbor<'py>(
 #[pyfunction]
 fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let cid: CidResult<Cid>;
-    if data.is_instance_of::<PyString>() {
-        let s = data.downcast::<PyString>()?;
+    if let Ok(s) = data.downcast::<PyString>() {
         cid = Cid::try_from(s.to_str()?);
     } else {
         cid = Cid::try_from(get_bytes_from_py_any(data)?);
