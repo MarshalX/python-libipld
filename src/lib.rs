@@ -53,7 +53,7 @@ fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-fn sort_map_keys(keys: &Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usize)> {
+fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> {
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
     for i in 0..len {
@@ -223,10 +223,10 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         }
 
         Ok(())
-    } else if let Ok(map) = obj.downcast::<PyMapping>() {
-        let len = map.len()?;
-        let keys = sort_map_keys(&map.keys()?, len);
-        let values = map.values()?;
+    } else if let Ok(map) = obj.downcast::<PyDict>() {
+        let len = map.len();
+        let keys = sort_map_keys(&map.keys(), len);
+        let values = map.values();
 
         encode::write_u64(w, MajorKind::Map, len as u64)?;
 
