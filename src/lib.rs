@@ -460,8 +460,7 @@ pub fn encode_dag_cbor<'py>(
     Ok(PyBytes::new_bound(py, &buf.get_ref()))
 }
 
-#[pyfunction]
-fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyDict>> {
+fn get_cid_from_py_any<'py>(data: &Bound<PyAny>) -> PyResult<Cid> {
     let cid: CidResult<Cid>;
     if let Ok(s) = data.downcast::<PyString>() {
         cid = Cid::try_from(s.to_str()?);
@@ -470,13 +469,23 @@ fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, 
     }
 
     if let Ok(cid) = cid {
-        Ok(cid_to_pydict(py, &cid))
+        Ok(cid)
     } else {
         Err(get_err(
             "Failed to decode CID",
             cid.unwrap_err().to_string(),
         ))
     }
+}
+
+#[pyfunction]
+fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    Ok(cid_to_pydict(py, &get_cid_from_py_any(data)?))
+}
+
+#[pyfunction]
+fn encode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyString>> {
+    Ok(PyString::new_bound(py, get_cid_from_py_any(data)?.to_string().as_str()))
 }
 
 #[pyfunction]
@@ -511,13 +520,18 @@ fn get_err(msg: &str, err: String) -> PyErr {
 }
 
 #[pymodule]
-fn libipld(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_car, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_dag_cbor, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_multibase, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_multibase, m)?)?;
+fn libipld(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction_bound!(decode_cid, m)?)?;
+    m.add_function(wrap_pyfunction_bound!(encode_cid, m)?)?;
+
+    m.add_function(wrap_pyfunction_bound!(decode_car, m)?)?;
+
+    m.add_function(wrap_pyfunction_bound!(decode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction_bound!(decode_dag_cbor_multi, m)?)?;
+    m.add_function(wrap_pyfunction_bound!(encode_dag_cbor, m)?)?;
+
+    m.add_function(wrap_pyfunction_bound!(decode_multibase, m)?)?;
+    m.add_function(wrap_pyfunction_bound!(encode_multibase, m)?)?;
+
     Ok(())
 }
