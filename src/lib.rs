@@ -74,6 +74,25 @@ fn sort_map_keys(keys: &Bound<PySequence>, len: usize) -> Vec<(PyBackedStr, usiz
     keys_str
 }
 
+fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
+    if obj.is_instance_of::<PyBytes>() {
+        let b = obj.downcast::<PyBytes>()?;
+        Ok(b.as_bytes())
+    } else if obj.is_instance_of::<PyByteArray>() {
+        let ba = obj.downcast::<PyByteArray>()?;
+        Ok(unsafe { ba.as_bytes() })
+    } else if obj.is_instance_of::<PyString>() {
+        let s = obj.downcast::<PyString>()?;
+        Ok(s.to_str()?.as_bytes())
+    } else {
+        Err(get_err(
+            "Failed to encode multibase",
+            "Unsupported data type".to_string(),
+        ))
+    }
+}
+
+
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
     r: &mut R,
@@ -140,8 +159,9 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 return Err(anyhow!("Non-42 tags are not supported"));
             }
 
-            let cid = decode::read_link(r)?.to_string();
-            PyString::new_bound(py, &cid).to_object(py)
+            // FIXME(MarshalX): to_bytes allocates
+            let cid = decode::read_link(r)?.to_bytes();
+            PyBytes::new_bound(py, &cid).to_object(py)
         }
         MajorKind::Other => match major {
             cbor::FALSE => false.to_object(py),
@@ -239,36 +259,33 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         Ok(())
     } else if obj.is_instance_of::<PyBytes>() {
         let b = obj.downcast::<PyBytes>().unwrap();
-        let l: u64 = b.len()? as u64;
-
-        encode::write_u64(w, MajorKind::ByteString, l)?;
-        w.write_all(b.as_bytes())?;
-
-        Ok(())
-    } else if obj.is_instance_of::<PyString>() {
-        let s = obj.downcast::<PyString>().unwrap();
 
         // FIXME (MarshalX): it's not efficient to try to parse it as CID
-        let cid = Cid::try_from(s.to_str()?);
-        if let Ok(cid) = cid {
-            // FIXME (MarshalX): allocates
-            let buf = cid.to_bytes();
+        let cid = Cid::try_from(b.as_bytes());
+        if let Ok(_) = cid {
+            let buf = b.as_bytes();
             let len = buf.len();
 
             encode::write_tag(w, 42)?;
             encode::write_u64(w, MajorKind::ByteString, len as u64 + 1)?;
             w.write_all(&[0])?;
             w.write_all(&buf[..len])?;
-
-            Ok(())
         } else {
-            let buf = s.to_str()?.as_bytes();
+            let l: u64 = b.len()? as u64;
 
-            encode::write_u64(w, MajorKind::TextString, buf.len() as u64)?;
-            w.write_all(buf)?;
-
-            Ok(())
+            encode::write_u64(w, MajorKind::ByteString, l)?;
+            w.write_all(b.as_bytes())?;
         }
+
+        Ok(())
+    } else if obj.is_instance_of::<PyString>() {
+        let s = obj.downcast::<PyString>().unwrap();
+        let buf = s.to_str()?.as_bytes();
+
+        encode::write_u64(w, MajorKind::TextString, buf.len() as u64)?;
+        w.write_all(buf)?;
+
+        Ok(())
     } else {
         Err(UnknownTag(0).into())
     }
@@ -417,8 +434,9 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
             ));
         };
 
-        let cid_base = cid.to_string().to_object(py);
-        parsed_blocks.set_item(cid_base, block).unwrap();
+        // FIXME(MarshalX): to_bytes allocates
+        let key = PyBytes::new_bound(py, &cid.to_bytes()).to_object(py);
+        parsed_blocks.set_item(key, block).unwrap();
     }
 
     Ok((header_obj, parsed_blocks))
@@ -453,8 +471,15 @@ pub fn encode_dag_cbor<'py>(
 }
 
 #[pyfunction]
-fn decode_cid<'py>(py: Python<'py>, data: &str) -> PyResult<Bound<'py, PyDict>> {
-    let cid = Cid::try_from(data);
+fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let cid: CidResult<Cid>;
+    if data.is_instance_of::<PyString>() {
+        let s = data.downcast::<PyString>()?;
+        cid = Cid::try_from(s.to_str()?);
+    } else {
+        cid = Cid::try_from(get_bytes_from_py_any(data)?);
+    }
+
     if let Ok(cid) = cid {
         Ok(cid_to_pydict(py, &cid))
     } else {
@@ -480,23 +505,7 @@ fn decode_multibase<'py>(py: Python<'py>, data: &str) -> PyResult<(char, Bound<'
 
 #[pyfunction]
 fn encode_multibase(code: char, data: &Bound<PyAny>) -> PyResult<String> {
-    let data_bytes: &[u8];
-    if data.is_instance_of::<PyBytes>() {
-        let b = data.downcast::<PyBytes>().unwrap();
-        data_bytes = b.as_bytes();
-    } else if data.is_instance_of::<PyByteArray>() {
-        let ba = data.downcast::<PyByteArray>().unwrap();
-        data_bytes = unsafe { ba.as_bytes() };
-    } else if data.is_instance_of::<PyString>() {
-        let s = data.downcast::<PyString>().unwrap();
-        data_bytes = s.to_str()?.as_bytes();
-    } else {
-        return Err(get_err(
-            "Failed to encode multibase",
-            "Unsupported data type".to_string(),
-        ));
-    }
-
+    let data_bytes = get_bytes_from_py_any(data)?;
     let base = multibase::Base::from_code(code);
     if let Ok(base) = base {
         Ok(multibase::encode(base, data_bytes))

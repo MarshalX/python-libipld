@@ -22,8 +22,8 @@ def test_decode_car(benchmark, car) -> None:
     assert 1 == len(header['roots'])
 
     assert isinstance(blocks, dict)
-    assert all(isinstance(k, str) for k in blocks.keys())
-    assert all(len(k) == 59 for k in blocks.keys())
+    assert all(isinstance(k, bytes) for k in blocks.keys())
+    assert all(len(k) == 36 for k in blocks.keys())
     assert all(isinstance(v, dict) for v in blocks.values())
     assert all(v for v in blocks.values())  # not empty dict
 
