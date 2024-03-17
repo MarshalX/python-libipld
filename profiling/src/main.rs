@@ -8,6 +8,7 @@ arg_enum! {
     enum Profile {
         DecodeCar,
         EncodeDagCbor,
+        DecodeDagCbor,
     }
 }
 
@@ -30,5 +31,6 @@ fn main() {
     match profile {
         Profile::DecodeCar => profiles::decode_car::exec(iterations),
         Profile::EncodeDagCbor => profiles::encode_dag_cbor::exec(iterations),
+        Profile::DecodeDagCbor => profiles::decode_dag_cbor::exec(iterations),
     }
 }

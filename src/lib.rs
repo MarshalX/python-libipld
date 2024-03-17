@@ -425,7 +425,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
 }
 
 #[pyfunction]
-fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
+pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
     let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(data)), 0);
     if let Ok(py_object) = py_object {
         Ok(py_object)
