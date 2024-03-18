@@ -133,16 +133,14 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let key = decode::read_str(r, key_len)?;
 
                 if let Some(prev_key) = prev_key {
-                    if map_key_cmp(&prev_key, &key) == std::cmp::Ordering::Greater {
-                        return Err(anyhow!("Map keys must be sorted"));
+                    // it cares about duplicated keys too thanks to Ordering::Equal
+                    if map_key_cmp(&prev_key, &key) != std::cmp::Ordering::Less {
+                        return Err(anyhow!("Map keys must be sorted and unique"));
                     }
                 }
 
                 let key_py = key.to_object(py);
                 prev_key = Some(key);
-                if dict.contains(&key_py)? == true {
-                    return Err(anyhow!("Duplicate keys are not allowed"));
-                }
 
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
                 dict.set_item(key_py, value).unwrap();

@@ -40,7 +40,15 @@ def test_dag_cbor_decode_duplicate_keys_error() -> None:
         # {"abc": 1, "abc": 2}
         libipld.decode_dag_cbor(bytes.fromhex('a263616263016361626302'))
 
-    assert 'Duplicate keys are not allowed' in str(exc_info.value)
+    assert 'Map keys must be sorted' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_wrong_keys_order_duplicate_keys_error() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        # {"abc": 1, "abd: 2", "abc": 1}
+        libipld.decode_dag_cbor(bytes.fromhex('A3636162630163616264026361626301'))
+
+    assert 'Map keys must be sorted' in str(exc_info.value)
 
 
 def test_dag_cbor_decode_non_string_key_error() -> None:
