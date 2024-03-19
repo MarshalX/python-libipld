@@ -42,7 +42,7 @@ fn decode_len(len: u64) -> Result<usize> {
     Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
 }
 
-fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+fn map_key_cmp(a: &Vec<u8>, b: &Vec<u8>) -> std::cmp::Ordering {
     /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
     - If two keys have different lengths, the shorter one sorts earlier;
     - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
@@ -53,6 +53,15 @@ fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
         a.cmp(b)
     }
 }
+
+fn map_key_cmp_old(a: &str, b: &str) -> std::cmp::Ordering {
+    if a.len() != b.len() {
+        a.len().cmp(&b.len())
+    } else {
+        a.cmp(b)
+    }
+}
+
 
 fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> {
     // Returns key and index.
@@ -69,7 +78,7 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> 
         let (s1, _) = a;
         let (s2, _) = b;
 
-        map_key_cmp(s1, s2)
+        map_key_cmp_old(s1, s2)
     });
 
     keys_str
@@ -130,7 +139,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             let len = decode_len(decode::read_uint(r, major)?)?;
             let dict = PyDict::new_bound(py);
 
-            let mut prev_key: Option<String> = None;
+            let mut prev_key: Option<Vec<u8>> = None;
             for _ in 0..len {
                 // DAG-CBOR keys are always strings
                 let key_major = decode::read_major(r)?;
@@ -139,7 +148,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 }
 
                 let key_len = decode::read_uint(r, key_major)?;
-                let key = decode::read_str(r, key_len)?;
+                let key = decode::read_bytes(r, key_len)?;
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
@@ -148,7 +157,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
-                let key_py = key.to_object(py);
+                let key_py = string_new_bound(py, key.as_slice()).to_object(py);
                 prev_key = Some(key);
 
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
