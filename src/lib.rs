@@ -105,7 +105,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            PyString::new_bound(py, &decode::read_str(r, len)?).to_object(py)
+            let str_bytes = PyBytes::new_bound(py, &decode::read_bytes(r, len)?);
+            PyString::from_object_bound(&str_bytes, "utf-8\0", "strict\0")?.to_object(py)
         }
         MajorKind::Array => {
             let len = decode_len(decode::read_uint(r, major)?)?;
