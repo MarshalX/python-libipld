@@ -1,4 +1,5 @@
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
+use std::os::raw::c_char;
 
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
@@ -10,7 +11,7 @@ use pyo3::conversion::ToPyObject;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::*;
-use pyo3::{PyObject, Python};
+use pyo3::{ffi, PyObject, Python};
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
@@ -89,6 +90,14 @@ fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]
     }
 }
 
+fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
+    let ptr = s.as_ptr() as *const c_char;
+    let len = s.len() as ffi::Py_ssize_t;
+    unsafe {
+        Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked()
+    }
+}
+
 
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
@@ -105,8 +114,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            let str_bytes = PyBytes::new_bound(py, &decode::read_bytes(r, len)?);
-            PyString::from_object_bound(&str_bytes, "utf-8\0", "strict\0")?.to_object(py)
+            string_new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
         }
         MajorKind::Array => {
             let len = decode_len(decode::read_uint(r, major)?)?;
