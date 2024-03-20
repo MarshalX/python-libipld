@@ -7,12 +7,9 @@ use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
+use pyo3::{ffi, prelude::*, types::*, PyObject, Python};
 use pyo3::conversion::ToPyObject;
-use pyo3::ffi::Py_ssize_t;
-use pyo3::{ffi, prelude::*};
 use pyo3::pybacked::PyBackedStr;
-use pyo3::types::*;
-use pyo3::{ffi, PyObject, Python};
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
@@ -55,15 +52,6 @@ fn map_key_cmp(a: &Vec<u8>, b: &Vec<u8>) -> std::cmp::Ordering {
     }
 }
 
-fn map_key_cmp_old(a: &str, b: &str) -> std::cmp::Ordering {
-    if a.len() != b.len() {
-        a.len().cmp(&b.len())
-    } else {
-        a.cmp(b)
-    }
-}
-
-
 fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> {
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
@@ -74,12 +62,21 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> 
         keys_str.push((backed_str, i));
     }
 
+    if keys_str.len() < 2 {
+        return keys_str;
+    }
+
     keys_str.sort_by(|a, b| {
         // sort_unstable_by performs bad
         let (s1, _) = a;
         let (s2, _) = b;
 
-        map_key_cmp_old(s1, s2)
+        // sorted length-first by the byte representation of the string keys
+        if s1.len() != s2.len() {
+            s1.len().cmp(&s2.len())
+        } else {
+            s1.cmp(&s2)
+        }
     });
 
     keys_str
@@ -127,7 +124,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             string_new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
         }
         MajorKind::Array => {
-            let len: Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
+            let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
 
             unsafe {
                 let ptr = ffi::PyList_New(len);
