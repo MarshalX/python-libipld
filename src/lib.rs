@@ -1,4 +1,5 @@
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
+use std::os::raw::c_char;
 
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
@@ -6,12 +7,9 @@ use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
+use pyo3::{ffi, prelude::*, types::*, PyObject, Python};
 use pyo3::conversion::ToPyObject;
-use pyo3::ffi::Py_ssize_t;
-use pyo3::{ffi, prelude::*};
 use pyo3::pybacked::PyBackedStr;
-use pyo3::types::*;
-use pyo3::{PyObject, Python};
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
@@ -42,7 +40,7 @@ fn decode_len(len: u64) -> Result<usize> {
     Ok(usize::try_from(len).map_err(|_| LengthOutOfRange::new::<usize>())?)
 }
 
-fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+fn map_key_cmp(a: &Vec<u8>, b: &Vec<u8>) -> std::cmp::Ordering {
     /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
     - If two keys have different lengths, the shorter one sorts earlier;
     - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
@@ -64,12 +62,21 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> 
         keys_str.push((backed_str, i));
     }
 
+    if keys_str.len() < 2 {
+        return keys_str;
+    }
+
     keys_str.sort_by(|a, b| {
         // sort_unstable_by performs bad
         let (s1, _) = a;
         let (s2, _) = b;
 
-        map_key_cmp(s1, s2)
+        // sorted length-first by the byte representation of the string keys
+        if s1.len() != s2.len() {
+            s1.len().cmp(&s2.len())
+        } else {
+            s1.cmp(&s2)
+        }
     });
 
     keys_str
@@ -90,6 +97,14 @@ fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]
     }
 }
 
+fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
+    let ptr = s.as_ptr() as *const c_char;
+    let len = s.len() as ffi::Py_ssize_t;
+    unsafe {
+        Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked()
+    }
+}
+
 
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
@@ -106,10 +121,10 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            PyString::new_bound(py, &decode::read_str(r, len)?).to_object(py)
+            string_new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
         }
         MajorKind::Array => {
-            let len: Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
+            let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
 
             unsafe {
                 let ptr = ffi::PyList_New(len);
@@ -126,7 +141,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             let len = decode_len(decode::read_uint(r, major)?)?;
             let dict = PyDict::new_bound(py);
 
-            let mut prev_key: Option<String> = None;
+            let mut prev_key: Option<Vec<u8>> = None;
             for _ in 0..len {
                 // DAG-CBOR keys are always strings
                 let key_major = decode::read_major(r)?;
@@ -135,7 +150,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 }
 
                 let key_len = decode::read_uint(r, key_major)?;
-                let key = decode::read_str(r, key_len)?;
+                let key = decode::read_bytes(r, key_len)?;
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
@@ -144,7 +159,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
-                let key_py = key.to_object(py);
+                let key_py = string_new_bound(py, key.as_slice()).to_object(py);
                 prev_key = Some(key);
 
                 let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
