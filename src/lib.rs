@@ -8,7 +8,8 @@ use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
 use pyo3::conversion::ToPyObject;
-use pyo3::prelude::*;
+use pyo3::ffi::Py_ssize_t;
+use pyo3::{ffi, prelude::*};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::*;
 use pyo3::{ffi, PyObject, Python};
@@ -126,14 +127,18 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             string_new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
         }
         MajorKind::Array => {
-            let len = decode_len(decode::read_uint(r, major)?)?;
-            let list = PyList::empty_bound(py);
+            let len: Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
 
-            for _ in 0..len {
-                list.append(decode_dag_cbor_to_pyobject(py, r, deep + 1)?)?;
+            unsafe {
+                let ptr = ffi::PyList_New(len);
+
+                for i in 0..len {
+                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, deep + 1)?.into_ptr());
+                }
+
+                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
+                list.to_object(py)
             }
-
-            list.to_object(py)
         }
         MajorKind::Map => {
             let len = decode_len(decode::read_uint(r, major)?)?;
