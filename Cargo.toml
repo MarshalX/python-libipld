@@ -13,7 +13,7 @@ name = "libipld"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.21.0-beta.0", features = ["generate-import-lib", "anyhow"] }
+pyo3 = { version = "0.21.0", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.7"
 anyhow = "1.0.75"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }

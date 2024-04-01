@@ -2,4 +2,3 @@ pytest==7.4.4
 pytest-benchmark==4.0.0
 pytest-codspeed==2.2.0
 pytest-xdist==3.5.0
-pycparser==2.21
