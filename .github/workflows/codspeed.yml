@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
+          toolchain: 1.76.0
 
       - name: Cache rust.
         uses: Swatinem/rust-cache@v2
