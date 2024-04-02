@@ -27,7 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
-          toolchain: 1.76.0
+          toolchain: stable
 
       - name: Cache rust.
         uses: Swatinem/rust-cache@v2
@@ -41,7 +41,7 @@ jobs:
         run: pytest . --benchmark-enable
 
       - name: Prepare merged PGO data.
-        run: rustup run 1.76.0 bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
+        run: rustup run stable bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
 
       - name: Compile with profile.
         run: pip install -v -e .
