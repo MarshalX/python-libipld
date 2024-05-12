@@ -30,3 +30,8 @@ debug = false
 incremental = false
 lto = true
 opt-level = 3
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
