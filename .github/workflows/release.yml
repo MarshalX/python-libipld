@@ -78,9 +78,9 @@ jobs:
           python-version: '3.11'
           architecture: ${{ matrix.python-architecture || 'x64' }}
 
-      - name: Install rust stable
+      - name: Install rust
         id: rust-toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.76.0
         with:
           components: llvm-tools
 
@@ -91,7 +91,7 @@ jobs:
           manylinux: ${{ matrix.manylinux || 'auto' }}
           container: ${{ matrix.container }}
           args: --release --out dist --interpreter ${{ matrix.maturin-interpreter || matrix.interpreter || '3.7 3.8 3.9 3.10 3.11 3.12 pypy3.7 pypy3.8 pypy3.9 pypy3.10' }} ${{ matrix.extra-build-args }}
-          rust-toolchain: stable
+          rust-toolchain: 1.76.0
           docker-options: -e CI
 
       - name: List wheels.
@@ -131,9 +131,9 @@ jobs:
         with:
           python-version: ${{ matrix.interpreter }}
 
-      - name: Install rust stable.
+      - name: Install rust.
         id: rust-toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.76.0
         with:
           components: llvm-tools
 
@@ -146,7 +146,7 @@ jobs:
         with:
           manylinux: auto
           args: --release --out pgo-wheel --interpreter ${{ matrix.interpreter }}
-          rust-toolchain: stable
+          rust-toolchain: 1.76.0
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
@@ -160,7 +160,7 @@ jobs:
           pytest . --benchmark-enable
 
           # we can't use github.workspace here because of Windows with backslashes
-          rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
+          rustup run 1.76.0 bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
       - name: Prepare merged PGO data.
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata
@@ -170,7 +170,7 @@ jobs:
         with:
           manylinux: auto
           args: --release --out dist --interpreter ${{ matrix.interpreter }}
-          rust-toolchain: stable
+          rust-toolchain: 1.76.0
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
