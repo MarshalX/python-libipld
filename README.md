@@ -34,7 +34,7 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 - Encode CID (`encode_cid(bytes) -> str`). Encodes CID raw byte form to stringified form.
 - Decode Multibase (`decode_multibase(str) -> tuple[str, bytes]`). Returns base and data.
 - Encode Multibase (`encode_multibase(str, bytes) -> str`). Accepts base and data.
-- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[str, dict]]`). Returns a header and blocks mapped by CID. CIDs in raw byte form.
+- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[bytes, dict]]`). Returns a header and blocks mapped by CID. CIDs in raw byte form.
 
 Note: stub file will be provided in the future.
 
