@@ -1,11 +1,11 @@
 [package]
 name = "libipld"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 license = "MIT"
 description = "Python binding to the Rust IPLD library"
 authors = ["Ilya (Marshal) <ilya@marshal.dev>"]
-keywords = ["python", "binding", "library", "lib", "ipld", "cid", "multibase", "multihash", "dag", "cbor", "json", "pb", "dag-cbor", "dag-json", "dag-pb"]
+keywords = ["python", "binding", "library", "lib", "ipld", "cid", "multibase", "multihash", "dag", "cbor", "json", "pb", "dag-cbor", "dag-json"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -13,8 +13,8 @@ name = "libipld"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22.2", features = ["generate-import-lib", "anyhow"] }
-python3-dll-a = "0.2.7"
+pyo3 = { version = "0.22.5", features = ["generate-import-lib", "anyhow"] }
+python3-dll-a = "0.2.10"
 anyhow = "1.0.75"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }
 multibase = "0.9"
