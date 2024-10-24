@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - python-3-13-support
     tags:
       - 'v*.*.*'
   workflow_dispatch:
