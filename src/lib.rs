@@ -150,6 +150,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
+                ffi::Py_LeaveRecursiveCall();
+
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
                 list.to_object(py)
             }
@@ -186,10 +188,11 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     };
 
                     let value_py = decode_dag_cbor_to_pyobject(py, r, deep + 1);
+                    ffi::Py_LeaveRecursiveCall();
+
                     if let Ok(value) = value_py {
                         dict.set_item(key_py, value)?;
                     } else {
-                        ffi::Py_LeaveRecursiveCall();
                         return Err(value_py.unwrap_err());
                     }
                 }
