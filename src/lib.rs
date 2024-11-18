@@ -1,4 +1,6 @@
+#[cfg(Py_3_9)]
 use std::ffi::CString;
+
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::os::raw::c_char;
 
@@ -106,24 +108,48 @@ fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
     }
 }
 
+#[cfg(Py_3_9)]
 fn create_recursive_call_label(name: &str) -> Result<CString> {
     // will be concatenated to the RecursionError message
     CString::new(format!(" in DAG-CBOR decoding while decoding nested {}", name))
         .map_err(|_| anyhow!("CString::new failed for recursive call label"))
 }
 
+#[cfg(Py_3_9)]
+unsafe fn enter_recursive_call(name: &str, depth: usize) -> Result<()> {
+    let recursive_call_label = create_recursive_call_label(name)?;
+    if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
+        return Err(anyhow!("Py_EnterRecursiveCall failed for {}. depth: {}", name, depth));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(Py_3_9))]
+unsafe fn enter_recursive_call(_name: &str, _depth: usize) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(Py_3_9)]
+unsafe fn leave_recursive_call() {
+    ffi::Py_LeaveRecursiveCall();
+}
+
+#[cfg(not(Py_3_9))]
+unsafe fn leave_recursive_call() {}
+
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
     r: &mut R,
     depth: usize,
 ) -> Result<PyObject> {
-    #[cfg(Py_3_8)] {
+    #[cfg(not(Py_3_9))] {
         if depth > 1000 { // default recursion limit as in Python
             PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
                 "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
             ).restore(py);
 
-            return Err(anyhow!("RecursionError: maximum recursion depth exceeded"));
+            return Err(anyhow!("Maximum recursion depth exceeded"));
         }
     }
 
@@ -145,28 +171,19 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             unsafe {
                 let ptr = ffi::PyList_New(len);
 
-                #[cfg(not(Py_3_8))] {
-                    let recursive_call_label = create_recursive_call_label("array")?;
-                    if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
-                        return Err(anyhow!("Py_EnterRecursiveCall failed for array. depth: {}", depth));
-                    };
-                }
+                enter_recursive_call("array", depth)?;
 
                 for i in 0..len {
                     let item = decode_dag_cbor_to_pyobject(py, r, depth + 1);
                     if let Ok(item) = item {
                         ffi::PyList_SET_ITEM(ptr, i, item.into_ptr());
                     } else {
-                        #[cfg(not(Py_3_8))] {
-                            ffi::Py_LeaveRecursiveCall();
-                        }
+                        leave_recursive_call();
                         return Err(item.unwrap_err());
                     }
                 }
 
-                #[cfg(not(Py_3_8))] {
-                    ffi::Py_LeaveRecursiveCall();
-                }
+                leave_recursive_call();
 
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
                 list.to_object(py)
@@ -198,17 +215,9 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 prev_key = Some(key);
 
                 unsafe {
-                    #[cfg(not(Py_3_8))] {
-                        let recursive_call_label = create_recursive_call_label("map")?;
-                        if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
-                            return Err(anyhow!("Py_EnterRecursiveCall failed for map. depth: {}", depth));
-                        };
-                    }
+                    enter_recursive_call("map", depth)?;
                     let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1);
-
-                    #[cfg(not(Py_3_8))] {
-                        ffi::Py_LeaveRecursiveCall();
-                    }
+                    leave_recursive_call();
 
                     if let Ok(value) = value_py {
                         dict.set_item(key_py, value)?;
