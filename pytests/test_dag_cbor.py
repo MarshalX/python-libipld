@@ -5,10 +5,12 @@ import pytest
 
 from conftest import load_cbor_data_fixtures, load_json_data_fixtures
 
-_ROUNDTRIP_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'roundtrip')
 _REAL_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
-_FIXTURES_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'fixtures')
-_CIDS_DAG_CBOR_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'torture_cids.dag-cbor')
+_ROUNDTRIP_DATA_DIR = os.path.join(_REAL_DATA_DIR, 'roundtrip')
+_FIXTURES_DATA_DIR = os.path.join(_REAL_DATA_DIR, 'fixtures')
+_TORTURE_CIDS_DAG_CBOR_PATH = os.path.join(_REAL_DATA_DIR, 'torture_cids.dagcbor')
+_TORTURE_NESTED_LISTS_DAG_CBOR_PATH = os.path.join(_REAL_DATA_DIR, 'torture_nested_lists.dagcbor')
+_TORTURE_NESTED_MAPS_DAG_CBOR_PATH = os.path.join(_REAL_DATA_DIR, 'torture_nested_maps.dagcbor')
 
 
 def _dag_cbor_encode(benchmark, data) -> None:
@@ -115,5 +117,21 @@ def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
 
 
 def test_dag_cbor_decode_torture_cids(benchmark) -> None:
-    dag_cbor = open(_CIDS_DAG_CBOR_PATH, 'rb').read()
+    dag_cbor = open(_TORTURE_CIDS_DAG_CBOR_PATH, 'rb').read()
     benchmark(libipld.decode_dag_cbor, dag_cbor)
+
+
+def test_recursion_limit_exceed_on_nested_lists() -> None:
+    dag_cbor = open(_TORTURE_NESTED_LISTS_DAG_CBOR_PATH, 'rb').read()
+    with pytest.raises(RecursionError) as exc_info:
+        libipld.decode_dag_cbor(dag_cbor)
+
+    assert 'while decoding nested array' in str(exc_info.value)
+
+
+def test_recursion_limit_exceed_on_nested_maps() -> None:
+    dag_cbor = open(_TORTURE_NESTED_MAPS_DAG_CBOR_PATH, 'rb').read()
+    with pytest.raises(RecursionError) as exc_info:
+        libipld.decode_dag_cbor(dag_cbor)
+
+    assert 'while decoding nested map' in str(exc_info.value)

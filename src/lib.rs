@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::os::raw::c_char;
 
@@ -105,6 +106,11 @@ fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
     }
 }
 
+fn create_recursive_call_label(name: &str) -> Result<CString> {
+    // will be concatenated to the RecursionError message
+    CString::new(format!(" in DAG-CBOR decoding while decoding nested {}", name))
+        .map_err(|_| anyhow!("CString::new failed for recursive call label"))
+}
 
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
@@ -113,7 +119,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
 ) -> Result<PyObject> {
     let major = decode::read_major(r)?;
     Ok(match major.kind() {
-        MajorKind::UnsignedInt => (decode::read_uint(r, major)?).to_object(py),
+        MajorKind::UnsignedInt => decode::read_uint(r, major)?.to_object(py),
         MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
@@ -129,8 +135,19 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             unsafe {
                 let ptr = ffi::PyList_New(len);
 
+                let recursive_call_label = create_recursive_call_label("array")?;
+                if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
+                    return Err(anyhow!("Py_EnterRecursiveCall failed for array. deep: {}", deep));
+                };
+
                 for i in 0..len {
-                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, deep + 1)?.into_ptr());
+                    let item = decode_dag_cbor_to_pyobject(py, r, deep + 1);
+                    if let Ok(item) = item {
+                        ffi::PyList_SET_ITEM(ptr, i, item.into_ptr());
+                    } else {
+                        ffi::Py_LeaveRecursiveCall();
+                        return Err(item.unwrap_err());
+                    }
                 }
 
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
@@ -162,8 +179,20 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let key_py = string_new_bound(py, key.as_slice()).to_object(py);
                 prev_key = Some(key);
 
-                let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
-                dict.set_item(key_py, value).unwrap();
+                unsafe {
+                    let recursive_call_label = create_recursive_call_label("map")?;
+                    if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
+                        return Err(anyhow!("Py_EnterRecursiveCall failed for map. deep: {}", deep));
+                    };
+
+                    let value_py = decode_dag_cbor_to_pyobject(py, r, deep + 1);
+                    if let Ok(value) = value_py {
+                        dict.set_item(key_py, value)?;
+                    } else {
+                        ffi::Py_LeaveRecursiveCall();
+                        return Err(value_py.unwrap_err());
+                    }
+                }
             }
 
             dict.to_object(py)
@@ -184,7 +213,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             cbor::NULL => py.None(),
             cbor::F32 => decode::read_f32(r)?.to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
-            _ => return Err(anyhow!(format!("Unsupported major type"))),
+            _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
     })
 }
@@ -456,10 +485,20 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
     if let Ok(py_object) = py_object {
         Ok(py_object)
     } else {
-        Err(get_err(
+        let err = get_err(
             "Failed to decode DAG-CBOR",
             py_object.unwrap_err().to_string(),
-        ))
+        );
+
+        if let Some(py_err) = PyErr::take(py) {
+            py_err.set_cause(py, Option::from(err));
+            // in case something set global interpreter’s error,
+            // for example C FFI function, we should return it
+            // the real case: RecursionError (set by Py_EnterRecursiveCall)
+            Err(py_err)
+        } else {
+            Err(err)
+        }
     }
 }
 
