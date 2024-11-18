@@ -126,7 +126,7 @@ def test_recursion_limit_exceed_on_nested_lists() -> None:
     with pytest.raises(RecursionError) as exc_info:
         libipld.decode_dag_cbor(dag_cbor)
 
-    assert 'while decoding nested array' in str(exc_info.value)
+    assert 'in DAG-CBOR decoding' in str(exc_info.value)
 
 
 def test_recursion_limit_exceed_on_nested_maps() -> None:
@@ -134,4 +134,4 @@ def test_recursion_limit_exceed_on_nested_maps() -> None:
     with pytest.raises(RecursionError) as exc_info:
         libipld.decode_dag_cbor(dag_cbor)
 
-    assert 'while decoding nested map' in str(exc_info.value)
+    assert 'in DAG-CBOR decoding' in str(exc_info.value)
