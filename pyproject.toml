@@ -1,5 +1,6 @@
 [project]
 name = "libipld"
+dynamic = ["version"]
 description = "Python binding to the Rust IPLD library"
 authors = [
     {name = "Ilya (Marshal)", email = "ilya@marshal.dev"}
