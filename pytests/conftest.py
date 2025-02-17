@@ -35,12 +35,19 @@ def load_cbor_data_fixtures(dir_path: str) -> List[Tuple[str, Any]]:
     return fixtures
 
 
-def load_car_fixture(did: str, path: str) -> bytes:
+def load_car_fixture(_: str, path: str) -> bytes:
     if os.path.exists(path):
         with open(path, 'rb') as f:
             return f.read()
 
-    contents = urllib.request.urlopen(f'https://bsky.network/xrpc/com.atproto.sync.getRepo?did={did}').read()
+    url = 'https://github.com/MarshalX/python-libipld/releases/download/v1.0.0/test_huge_repo.car'
+
+    # Bsky team disabled the endpoint below.
+    # We could not rely on it anymore.
+    # Request forbidden by administrative rules (403 Forbidden).
+    # url = f'https://bsky.network/xrpc/com.atproto.sync.getRepo?did={did}'
+
+    contents = urllib.request.urlopen(url).read()
     with open(path, 'wb') as f:
         f.write(contents)
 

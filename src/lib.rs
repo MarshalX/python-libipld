@@ -105,15 +105,24 @@ fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
     }
 }
 
-
 fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     py: Python,
     r: &mut R,
-    deep: usize,
+    depth: usize,
 ) -> Result<PyObject> {
+    unsafe {
+        if depth > ffi::Py_GetRecursionLimit() as usize {
+            PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
+                "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
+            ).restore(py);
+
+            return Err(anyhow!("Maximum recursion depth exceeded"));
+        }
+    }
+
     let major = decode::read_major(r)?;
     Ok(match major.kind() {
-        MajorKind::UnsignedInt => (decode::read_uint(r, major)?).to_object(py),
+        MajorKind::UnsignedInt => decode::read_uint(r, major)?.to_object(py),
         MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
@@ -130,7 +139,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let ptr = ffi::PyList_New(len);
 
                 for i in 0..len {
-                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, deep + 1)?.into_ptr());
+                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, depth + 1)?.into_ptr());
                 }
 
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
@@ -162,8 +171,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let key_py = string_new_bound(py, key.as_slice()).to_object(py);
                 prev_key = Some(key);
 
-                let value = decode_dag_cbor_to_pyobject(py, r, deep + 1)?;
-                dict.set_item(key_py, value).unwrap();
+                let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
+                dict.set_item(key_py, value_py)?;
             }
 
             dict.to_object(py)
@@ -184,7 +193,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             cbor::NULL => py.None(),
             cbor::F32 => decode::read_f32(r)?.to_object(py),
             cbor::F64 => decode::read_f64(r)?.to_object(py),
-            _ => return Err(anyhow!(format!("Unsupported major type"))),
+            _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
     })
 }
@@ -456,10 +465,20 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
     if let Ok(py_object) = py_object {
         Ok(py_object)
     } else {
-        Err(get_err(
+        let err = get_err(
             "Failed to decode DAG-CBOR",
             py_object.unwrap_err().to_string(),
-        ))
+        );
+
+        if let Some(py_err) = PyErr::take(py) {
+            py_err.set_cause(py, Option::from(err));
+            // in case something set global interpreter’s error,
+            // for example C FFI function, we should return it
+            // the real case: RecursionError (set by Py_EnterRecursiveCall)
+            Err(py_err)
+        } else {
+            Err(err)
+        }
     }
 }
 
