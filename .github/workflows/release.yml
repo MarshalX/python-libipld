@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - update-pyo3
     tags:
       - 'v*.*.*'
   workflow_dispatch:
