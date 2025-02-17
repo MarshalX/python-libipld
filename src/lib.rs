@@ -1,8 +1,6 @@
-#[cfg(Py_3_9)]
 use std::ffi::CString;
 use std::collections::HashMap;
 use std::sync::Mutex;
-
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::os::raw::c_char;
 
