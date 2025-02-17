@@ -139,12 +139,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let ptr = ffi::PyList_New(len);
 
                 for i in 0..len {
-                    let item = decode_dag_cbor_to_pyobject(py, r, depth + 1);
-                    if let Ok(item) = item {
-                        ffi::PyList_SET_ITEM(ptr, i, item.into_ptr());
-                    } else {
-                        return Err(item.unwrap_err());
-                    }
+                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, depth + 1)?.into_ptr());
                 }
 
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
@@ -176,13 +171,8 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let key_py = string_new_bound(py, key.as_slice()).to_object(py);
                 prev_key = Some(key);
 
-                let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1);
-
-                if let Ok(value) = value_py {
-                    dict.set_item(key_py, value)?;
-                } else {
-                    return Err(value_py.unwrap_err());
-                }
+                let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
+                dict.set_item(key_py, value_py)?;
             }
 
             dict.to_object(py)

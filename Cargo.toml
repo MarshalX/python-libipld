@@ -21,9 +21,6 @@ multibase = "0.9"
 byteorder = "1.5.0"
 multihash = "0.18.1"
 
-[build-dependencies]
-pyo3-build-config = { git = "https://github.com/pyo3/pyo3", features = ["resolve-config"] }
-
 [workspace]
 members = [ "profiling" ]
 
