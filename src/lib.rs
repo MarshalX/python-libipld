@@ -114,23 +114,23 @@ lazy_static! {
 }
 
 #[cfg(Py_3_9)]
-fn create_recursive_call_label(action: &str, name: &str) -> Result<CString> {
+fn create_recursive_call_label(action: &str, name: &str) -> Result<*const c_char> {
     let mut cache = RECURSIVE_CALL_LABEL_CACHE.lock().unwrap();
     if let Some(cached) = cache.get(&(action.to_string(), name.to_string())) {
-        return Ok(cached.clone());
+        return Ok(cached.as_ptr());
     }
 
     // will be concatenated to the RecursionError message
     let formatted_str = format!(" in DAG-CBOR {} while {} nested {}", action, action, name);
     let cstring = CString::new(formatted_str).map_err(|_| anyhow!("CString::new failed for recursive call label"))?;
     cache.insert((action.to_string(), name.to_string()), cstring.clone());
-    Ok(cstring)
+    Ok(cstring.as_ptr())
 }
 
 #[cfg(Py_3_9)]
 unsafe fn enter_recursive_call(action: &str, name: &str, depth: usize) -> Result<()> {
     let recursive_call_label = create_recursive_call_label(action, name)?;
-    if ffi::Py_EnterRecursiveCall(recursive_call_label.as_ptr()) != 0 {
+    if ffi::Py_EnterRecursiveCall(recursive_call_label) != 0 {
         return Err(anyhow!("Py_EnterRecursiveCall failed for {}. depth: {}", name, depth));
     }
 
