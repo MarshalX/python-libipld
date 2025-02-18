@@ -1,6 +1,6 @@
 [package]
 name = "libipld"
-version = "3.0.0"
+version = "3.0.1"
 edition = "2021"
 license = "MIT"
 description = "Python binding to the Rust IPLD library"
@@ -13,11 +13,11 @@ name = "libipld"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22.5", features = ["generate-import-lib", "anyhow"] }
-python3-dll-a = "0.2.10"
-anyhow = "1.0.75"
+pyo3 = { version = "0.23.4", features = ["generate-import-lib", "anyhow"] }
+python3-dll-a = "0.2.13"
+anyhow = "1.0.95"
 libipld = { version = "0.16.0", features = ["dag-cbor"] }
-multibase = "0.9"
+multibase = "0.9.1"
 byteorder = "1.5.0"
 multihash = "0.18.1"
 

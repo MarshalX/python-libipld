@@ -36,11 +36,11 @@ jobs:
 
           - os: macos
             target: x86_64
-            interpreter: pypy3.8 pypy3.9 pypy3.10
+            interpreter: pypy3.9 pypy3.10
           - os: macos
             target: aarch64
             # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
-            interpreter: 3.8 3.9 pypy3.8 pypy3.9 pypy3.10
+            interpreter: 3.8 3.9 pypy3.9 pypy3.10
 
           - os: ubuntu
             target: x86_64
@@ -90,7 +90,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           container: ${{ matrix.container }}
-          args: --release --out dist --interpreter ${{ matrix.maturin-interpreter || matrix.interpreter || '3.8 3.9 3.10 3.11 3.12 3.13 pypy3.8 pypy3.9 pypy3.10' }} ${{ matrix.extra-build-args }}
+          args: --release --out dist --interpreter ${{ matrix.maturin-interpreter || matrix.interpreter || '3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10' }} ${{ matrix.extra-build-args }}
           rust-toolchain: 1.76.0
           docker-options: -e CI
 
@@ -108,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-12, macos-14 ]
+        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
         interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13' ]
         exclude:
           # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64

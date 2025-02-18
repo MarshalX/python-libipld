@@ -7,25 +7,24 @@ use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
-use pyo3::{ffi, prelude::*, types::*, PyObject, Python};
-use pyo3::conversion::ToPyObject;
+use pyo3::{ffi, prelude::*, types::*, BoundObject, PyObject, Python};
 use pyo3::pybacked::PyBackedStr;
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
-    let dict_obj = PyDict::new_bound(py);
+    let dict_obj = PyDict::new(py);
 
     dict_obj.set_item("code", hash.code()).unwrap();
     dict_obj.set_item("size", hash.size()).unwrap();
     dict_obj
-        .set_item("digest", PyBytes::new_bound(py, &hash.digest()))
+        .set_item("digest", PyBytes::new(py, &hash.digest()))
         .unwrap();
 
     dict_obj
 }
 
 fn cid_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
-    let dict_obj = PyDict::new_bound(py);
+    let dict_obj = PyDict::new(py);
 
     dict_obj.set_item("version", cid.version() as u64).unwrap();
     dict_obj.set_item("codec", cid.codec()).unwrap();
@@ -122,15 +121,15 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
 
     let major = decode::read_major(r)?;
     Ok(match major.kind() {
-        MajorKind::UnsignedInt => decode::read_uint(r, major)?.to_object(py),
-        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).to_object(py),
+        MajorKind::UnsignedInt => decode::read_uint(r, major)?.into_pyobject(py)?.into(),
+        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).into_pyobject(py)?.into(),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
-            PyBytes::new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
+            PyBytes::new(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            string_new_bound(py, &decode::read_bytes(r, len)?).to_object(py)
+            string_new_bound(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
         }
         MajorKind::Array => {
             let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
@@ -143,12 +142,12 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 }
 
                 let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
-                list.to_object(py)
+                list.into_pyobject(py)?.into()
             }
         }
         MajorKind::Map => {
             let len = decode_len(decode::read_uint(r, major)?)?;
-            let dict = PyDict::new_bound(py);
+            let dict = PyDict::new(py);
 
             let mut prev_key: Option<Vec<u8>> = None;
             for _ in 0..len {
@@ -168,14 +167,14 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
-                let key_py = string_new_bound(py, key.as_slice()).to_object(py);
+                let key_py = string_new_bound(py, key.as_slice()).into_pyobject(py)?;
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
                 dict.set_item(key_py, value_py)?;
             }
 
-            dict.to_object(py)
+            dict.into_pyobject(py)?.into()
         }
         MajorKind::Tag => {
             let value = decode::read_uint(r, major)?;
@@ -185,14 +184,15 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
 
             // FIXME(MarshalX): to_bytes allocates
             let cid = decode::read_link(r)?.to_bytes();
-            PyBytes::new_bound(py, &cid).to_object(py)
+            PyBytes::new(py, &cid).into_pyobject(py)?.into()
         }
         MajorKind::Other => match major {
-            cbor::FALSE => false.to_object(py),
-            cbor::TRUE => true.to_object(py),
+            // FIXME(MarshalX): should be more clear for bool?
+            cbor::FALSE => false.into_pyobject(py)?.into_any().unbind(),
+            cbor::TRUE => true.into_pyobject(py)?.into_any().unbind(),
             cbor::NULL => py.None(),
-            cbor::F32 => decode::read_f32(r)?.to_object(py),
-            cbor::F64 => decode::read_f64(r)?.to_object(py),
+            cbor::F32 => decode::read_f32(r)?.into_pyobject(py)?.into(),
+            cbor::F64 => decode::read_f64(r)?.into_pyobject(py)?.into(),
             _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
     })
@@ -311,7 +311,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
 #[pyfunction]
 fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
     let mut reader = BufReader::new(Cursor::new(data));
-    let decoded_parts = PyList::empty_bound(py);
+    let decoded_parts = PyList::empty(py);
 
     loop {
         let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
@@ -420,7 +420,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
 
     // FIXME (MarshalX): we are not verifying if the roots are valid CIDs
 
-    let parsed_blocks = PyDict::new_bound(py);
+    let parsed_blocks = PyDict::new(py);
 
     loop {
         if let Err(_) = read_u64_leb128(buf) {
@@ -452,7 +452,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
         };
 
         // FIXME(MarshalX): to_bytes allocates
-        let key = PyBytes::new_bound(py, &cid.to_bytes()).to_object(py);
+        let key = PyBytes::new(py, &cid.to_bytes()).into_pyobject(py)?;
         parsed_blocks.set_item(key, block)?;
     }
 
@@ -494,7 +494,7 @@ pub fn encode_dag_cbor<'py>(
     if let Err(e) = buf.flush() {
         return Err(get_err("Failed to flush buffer", e.to_string()));
     }
-    Ok(PyBytes::new_bound(py, &buf.get_ref()))
+    Ok(PyBytes::new(py, &buf.get_ref()))
 }
 
 fn get_cid_from_py_any<'py>(data: &Bound<PyAny>) -> PyResult<Cid> {
@@ -522,14 +522,14 @@ fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, 
 
 #[pyfunction]
 fn encode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyString>> {
-    Ok(PyString::new_bound(py, get_cid_from_py_any(data)?.to_string().as_str()))
+    Ok(PyString::new(py, get_cid_from_py_any(data)?.to_string().as_str()))
 }
 
 #[pyfunction]
 fn decode_multibase<'py>(py: Python<'py>, data: &str) -> PyResult<(char, Bound<'py, PyBytes>)> {
     let base = multibase::decode(data);
     if let Ok((base, data)) = base {
-        Ok((base.code(), PyBytes::new_bound(py, &data)))
+        Ok((base.code(), PyBytes::new(py, &data)))
     } else {
         Err(get_err(
             "Failed to decode multibase",
@@ -558,17 +558,17 @@ fn get_err(msg: &str, err: String) -> PyErr {
 
 #[pymodule]
 fn libipld(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction_bound!(decode_cid, m)?)?;
-    m.add_function(wrap_pyfunction_bound!(encode_cid, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_cid, m)?)?;
 
-    m.add_function(wrap_pyfunction_bound!(decode_car, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_car, m)?)?;
 
-    m.add_function(wrap_pyfunction_bound!(decode_dag_cbor, m)?)?;
-    m.add_function(wrap_pyfunction_bound!(decode_dag_cbor_multi, m)?)?;
-    m.add_function(wrap_pyfunction_bound!(encode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_dag_cbor_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_dag_cbor, m)?)?;
 
-    m.add_function(wrap_pyfunction_bound!(decode_multibase, m)?)?;
-    m.add_function(wrap_pyfunction_bound!(encode_multibase, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_multibase, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_multibase, m)?)?;
 
     Ok(())
 }
