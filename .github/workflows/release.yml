@@ -109,7 +109,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-12, macos-14 ]
+        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
         interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13' ]
         exclude:
           # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
