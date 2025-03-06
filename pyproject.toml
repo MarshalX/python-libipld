@@ -37,6 +37,9 @@ classifiers = [
 "Tracker" = "https://github.com/MarshalX/python-libipld/issues"
 "Author" = "https://github.com/MarshalX"
 
+[dependency-groups]
+dev = ["maturin", "pytest"]
+
 [tool.pytest.ini_options]
 addopts = [
     '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',
@@ -44,6 +47,9 @@ addopts = [
 ]
 
 [tool.maturin]
+python-source = "python"
+module-name = "libipld._libipld"
+bindings = "pyo3"
 features = ["pyo3/extension-module"]
 
 [build-system]
