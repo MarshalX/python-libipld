@@ -7,8 +7,8 @@ use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
-use pyo3::pybacked::PyBackedStr;
 use pyo3::{ffi, prelude::*, types::*, BoundObject, PyObject, Python};
+use pyo3::pybacked::PyBackedStr;
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
@@ -17,7 +17,7 @@ fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     dict_obj.set_item("code", hash.code()).unwrap();
     dict_obj.set_item("size", hash.size()).unwrap();
     dict_obj
-        .set_item("digest", PyBytes::new(py, hash.digest()))
+        .set_item("digest", PyBytes::new(py, &hash.digest()))
         .unwrap();
 
     dict_obj
@@ -74,7 +74,7 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> 
         if s1.len() != s2.len() {
             s1.len().cmp(&s2.len())
         } else {
-            s1.cmp(s2)
+            s1.cmp(&s2)
         }
     });
 
@@ -100,8 +100,7 @@ fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
     let ptr = s.as_ptr() as *const c_char;
     let len = s.len() as ffi::Py_ssize_t;
     unsafe {
-        Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len))
-            .downcast_into_unchecked()
+        Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked()
     }
 }
 
@@ -114,8 +113,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         if depth > ffi::Py_GetRecursionLimit() as usize {
             PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
                 "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
-            )
-            .restore(py);
+            ).restore(py);
 
             return Err(anyhow!("Maximum recursion depth exceeded"));
         }
@@ -124,20 +122,14 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     let major = decode::read_major(r)?;
     Ok(match major.kind() {
         MajorKind::UnsignedInt => decode::read_uint(r, major)?.into_pyobject(py)?.into(),
-        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64)
-            .into_pyobject(py)?
-            .into(),
+        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).into_pyobject(py)?.into(),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
-            PyBytes::new(py, &decode::read_bytes(r, len)?)
-                .into_pyobject(py)?
-                .into()
+            PyBytes::new(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            string_new_bound(py, &decode::read_bytes(r, len)?)
-                .into_pyobject(py)?
-                .into()
+            string_new_bound(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
         }
         MajorKind::Array => {
             let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
@@ -146,15 +138,10 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 let ptr = ffi::PyList_New(len);
 
                 for i in 0..len {
-                    ffi::PyList_SET_ITEM(
-                        ptr,
-                        i,
-                        decode_dag_cbor_to_pyobject(py, r, depth + 1)?.into_ptr(),
-                    );
+                    ffi::PyList_SET_ITEM(ptr, i, decode_dag_cbor_to_pyobject(py, r, depth + 1)?.into_ptr());
                 }
 
-                let list: Bound<'_, PyList> =
-                    Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
+                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
                 list.into_pyobject(py)?.into()
             }
         }
@@ -212,7 +199,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
 }
 
 fn encode_dag_cbor_from_pyobject<'py, W: Write>(
-    _py: Python<'py>,
+    py: Python<'py>,
     obj: &Bound<'py, PyAny>,
     w: &mut W,
 ) -> Result<()> {
@@ -259,7 +246,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         encode::write_u64(w, MajorKind::Array, len as u64)?;
 
         for i in 0..len {
-            encode_dag_cbor_from_pyobject(_py, &l.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, &l.get_item(i)?, w)?;
         }
 
         Ok(())
@@ -275,7 +262,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
             encode::write_u64(w, MajorKind::TextString, key_buf.len() as u64)?;
             w.write_all(key_buf)?;
 
-            encode_dag_cbor_from_pyobject(_py, &values.get_item(i)?, w)?;
+            encode_dag_cbor_from_pyobject(py, &values.get_item(i)?, w)?;
         }
 
         Ok(())
@@ -293,7 +280,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
     } else if let Ok(b) = obj.downcast::<PyBytes>() {
         // FIXME (MarshalX): it's not efficient to try to parse it as CID
         let cid = Cid::try_from(b.as_bytes());
-        if cid.is_ok() {
+        if let Ok(_) = cid {
             let buf = b.as_bytes();
             let len = buf.len();
 
@@ -345,7 +332,7 @@ fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
 
     loop {
         let mut buf = [0];
-        if r.read_exact(&mut buf).is_err() {
+        if let Err(_) = r.read_exact(&mut buf) {
             return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
         }
 
@@ -390,7 +377,7 @@ fn read_cid_from_bytes<R: Read>(r: &mut R) -> CidResult<Cid> {
 pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Bound<'py, PyDict>)> {
     let buf = &mut BufReader::new(Cursor::new(data));
 
-    if read_u64_leb128(buf).is_err() {
+    if let Err(_) = read_u64_leb128(buf) {
         return Err(get_err(
             "Failed to read CAR header",
             "Invalid uvarint".to_string(),
@@ -436,7 +423,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
     let parsed_blocks = PyDict::new(py);
 
     loop {
-        if read_u64_leb128(buf).is_err() {
+        if let Err(_) = read_u64_leb128(buf) {
             // FIXME (MarshalX): we are not raising an error here because of possible EOF
             break;
         }
@@ -485,7 +472,7 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
 
         if let Some(py_err) = PyErr::take(py) {
             py_err.set_cause(py, Option::from(err));
-            // in case something set global interpreter's error,
+            // in case something set global interpreter’s error,
             // for example C FFI function, we should return it
             // the real case: RecursionError (set by Py_EnterRecursiveCall)
             Err(py_err)
@@ -507,10 +494,9 @@ pub fn encode_dag_cbor<'py>(
     if let Err(e) = buf.flush() {
         return Err(get_err("Failed to flush buffer", e.to_string()));
     }
-    Ok(PyBytes::new(py, buf.get_ref()))
+    Ok(PyBytes::new(py, &buf.get_ref()))
 }
 
-#[allow(clippy::extra_unused_lifetimes)]
 fn get_cid_from_py_any<'py>(data: &Bound<PyAny>) -> PyResult<Cid> {
     let cid: CidResult<Cid>;
     if let Ok(s) = data.downcast::<PyString>() {
@@ -536,10 +522,7 @@ fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, 
 
 #[pyfunction]
 fn encode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyString>> {
-    Ok(PyString::new(
-        py,
-        get_cid_from_py_any(data)?.to_string().as_str(),
-    ))
+    Ok(PyString::new(py, get_cid_from_py_any(data)?.to_string().as_str()))
 }
 
 #[pyfunction]
