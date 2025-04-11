@@ -46,7 +46,7 @@ def decode_dag_cbor(data: bytes) -> Any:
         data: Raw DAG-CBOR bytes
 
     Returns:
-        A Python object (dict, list, str, bytes, int, float, bool, or None)
+        A Python object
     """
 
 def decode_dag_cbor_multi(data: bytes) -> list[Any]:
@@ -64,7 +64,6 @@ def encode_dag_cbor(data: Any) -> bytes:
 
     Args:
         data: Any Python object that can be encoded to DAG-CBOR
-              (dict, list, str, bytes, int, float, bool, or None)
 
     Returns:
         Raw DAG-CBOR bytes
@@ -88,7 +87,6 @@ def encode_multibase(code: str, data: Any) -> str:
     Args:
         code: str (base code, e.g. 'u' for base58btc)
         data: Any Python object that can be converted to bytes
-              (str, bytes, bytearray, or other objects that can be converted to bytes)
 
     Returns:
         Multibase-encoded string
