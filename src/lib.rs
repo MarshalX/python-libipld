@@ -122,7 +122,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
     let major = decode::read_major(r)?;
     Ok(match major.kind() {
         MajorKind::UnsignedInt => decode::read_uint(r, major)?.into_pyobject(py)?.into(),
-        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i64).into_pyobject(py)?.into(),
+        MajorKind::NegativeInt => (-1 - decode::read_uint(r, major)? as i128).into_pyobject(py)?.into(),
         MajorKind::ByteString => {
             let len = decode::read_uint(r, major)?;
             PyBytes::new(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
