@@ -231,7 +231,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
 
         Ok(())
     } else if obj.is_instance_of::<PyInt>() {
-        let i: i64 = obj.extract()?;
+        let i: i128 = obj.extract()?;
 
         if i.is_negative() {
             encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?

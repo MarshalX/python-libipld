@@ -137,11 +137,21 @@ def test_recursion_limit_exceed_on_nested_maps() -> None:
     assert 'in DAG-CBOR decoding' in str(exc_info.value)
 
 
-def test_dag_cbor_decode_largest_unsigned_int() -> None:
-    result = libipld.decode_dag_cbor(bytes.fromhex('1bffffffffffffffff'))
-    assert result == 2**64 - 1
+def test_dag_cbor_decode_largest_unsigned_int_roundtrip() -> None:
+    data = bytes.fromhex('1bffffffffffffffff')
+
+    decoded_result = libipld.decode_dag_cbor(data)
+    assert decoded_result == 2**64 - 1
+
+    encoded_result = libipld.encode_dag_cbor(decoded_result)
+    assert encoded_result == data
 
 
-def test_dag_cbor_decode_smallest_negative_int() -> None:
-    result = libipld.decode_dag_cbor(bytes.fromhex('3bffffffffffffffff'))
-    assert result == -(2**64)
+def test_dag_cbor_decode_smallest_negative_int_roundtrip() -> None:
+    data = bytes.fromhex('3bffffffffffffffff')
+
+    decoded_result = libipld.decode_dag_cbor(data)
+    assert decoded_result == -(2**64)
+
+    encoded_result = libipld.encode_dag_cbor(decoded_result)
+    assert encoded_result == data
