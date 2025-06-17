@@ -135,3 +135,11 @@ def test_recursion_limit_exceed_on_nested_maps() -> None:
         libipld.decode_dag_cbor(dag_cbor)
 
     assert 'in DAG-CBOR decoding' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_invalid_utf8() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('62c328'))
+
+
+    assert 'Invalid UTF-8 string' in str(exc_info.value)
