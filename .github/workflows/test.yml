@@ -28,4 +28,4 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: Run Tests.
-        run: pytest
+        run: uv run pytest
