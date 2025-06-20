@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - release-v3.1.0
     tags:
       - 'v*.*.*'
   workflow_dispatch:
