@@ -179,3 +179,51 @@ def test_dab_cbor_encode_map_int_key() -> None:
         libipld.encode_dag_cbor(obj)
 
     assert 'Map keys must be strings' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_nan_f64_error() -> None:
+    # fb7ff8000000000000 - IEEE 754 double precision NaN
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fb7ff8000000000000'))
+
+    assert 'number out of range for f64' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_positive_infinity_f64_error() -> None:
+    # fb7ff0000000000000 - IEEE 754 double precision positive infinity
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fb7ff0000000000000'))
+
+    assert 'number out of range for f64' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_negative_infinity_f64_error() -> None:
+    # fbfff0000000000000 - IEEE 754 double precision negative infinity
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fbfff0000000000000'))
+
+    assert 'number out of range for f64' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_nan_f32_error() -> None:
+    # fa7fc00000 - IEEE 754 single precision NaN
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fa7fc00000'))
+
+    assert 'number out of range for f32' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_positive_infinity_f32_error() -> None:
+    # fa7f800000 - IEEE 754 single precision positive infinity
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fa7f800000'))
+
+    assert 'number out of range for f32' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_negative_infinity_f32_error() -> None:
+    # faff800000 - IEEE 754 single precision negative infinity
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('faff800000'))
+
+    assert 'number out of range for f32' in str(exc_info.value).lower()
