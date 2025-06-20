@@ -199,8 +199,20 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
             cbor::FALSE => false.into_pyobject(py)?.into_any().unbind(),
             cbor::TRUE => true.into_pyobject(py)?.into_any().unbind(),
             cbor::NULL => py.None(),
-            cbor::F32 => decode::read_f32(r)?.into_pyobject(py)?.into(),
-            cbor::F64 => decode::read_f64(r)?.into_pyobject(py)?.into(),
+            cbor::F32 => {
+                let value = decode::read_f32(r)?;
+                if !value.is_finite() {
+                    return Err(anyhow!("Number out of range for f32 (NaNs are forbidden)".to_string()));
+                }
+                value.into_pyobject(py)?.into()
+            },
+            cbor::F64 => {
+                let value = decode::read_f64(r)?;
+                if !value.is_finite() {
+                    return Err(anyhow!("Number out of range for f64 (NaNs are forbidden)".to_string()));
+                }
+                value.into_pyobject(py)?.into()
+            },
             _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
     })
