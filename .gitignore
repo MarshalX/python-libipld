@@ -31,3 +31,4 @@ __pycache__
 
 # Build artifacts
 *.so
+*.pyd
