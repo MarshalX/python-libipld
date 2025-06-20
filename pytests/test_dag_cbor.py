@@ -137,6 +137,15 @@ def test_recursion_limit_exceed_on_nested_maps() -> None:
     assert 'in DAG-CBOR decoding' in str(exc_info.value)
 
 
+
+def test_dag_cbor_decode_invalid_utf8() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('62c328'))
+
+
+    assert 'Invalid UTF-8 string' in str(exc_info.value)
+
+
 def test_dab_cbor_decode_map_int_key() -> None:
     dag_cbor = bytes.fromhex('a10000')
     with pytest.raises(ValueError) as exc_info:
@@ -151,3 +160,4 @@ def test_dab_cbor_encode_map_int_key() -> None:
         libipld.encode_dag_cbor(obj)
 
     assert 'Map keys must be strings' in str(exc_info.value)
+
