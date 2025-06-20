@@ -72,7 +72,7 @@ jobs:
         run: echo "path=$(ls dist/*.whl)" | tee -a "$GITHUB_OUTPUT"
 
       - name: Install PGO wheel.
-        run: uv pip install ${{ steps.pgo-wheel.outputs.wheel }} --force-reinstall
+        run: uv pip install ${{ steps.pgo-wheel.outputs.path }} --force-reinstall
 
       - name: Run CodSpeed benchmarks.
         uses: CodSpeedHQ/action@v3
