@@ -227,3 +227,22 @@ def test_dag_cbor_decode_negative_infinity_f32_error() -> None:
         libipld.decode_dag_cbor(bytes.fromhex('faff800000'))
 
     assert 'number out of range for f32' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_cbor_sequence_error() -> None:
+    # 0000 - two CBOR zeros (CBOR sequence), invalid in DAG-CBOR
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('0000'))
+
+    assert 'multiple objects' in str(exc_info.value).lower()
+
+
+def test_decode_dag_cbor_multi() -> None:
+    # 0001 - two CBOR zeros (CBOR sequence), valid in DAG-CBOR
+    dag_cbor = bytes.fromhex('0000')
+    decoded = libipld.decode_dag_cbor_multi(dag_cbor)
+
+    assert isinstance(decoded, list)
+    assert len(decoded) == 2
+    assert decoded[0] == 0
+    assert decoded[1] == 0

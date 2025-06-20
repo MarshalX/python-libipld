@@ -481,9 +481,19 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(PyObject, Boun
 
 #[pyfunction]
 pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<PyObject> {
-    let py_object = decode_dag_cbor_to_pyobject(py, &mut BufReader::new(Cursor::new(data)), 0);
+    let mut reader = BufReader::new(Cursor::new(data));
+    let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
     if let Ok(py_object) = py_object {
-        Ok(py_object)
+        // check for any remaining data in the reader
+        let mut buf = [0u8; 1];
+        match reader.read(&mut buf) {
+            Ok(0) => Ok(py_object), // EOF
+            Err(_) => Ok(py_object), // EOF
+            Ok(_) => Err(get_err(
+                "Failed to decode DAG-CBOR", 
+                "Invalid DAG-CBOR: contains multiple objects (CBOR sequence)".to_string()
+            )),
+        }
     } else {
         let err = get_err(
             "Failed to decode DAG-CBOR",
