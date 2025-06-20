@@ -238,7 +238,7 @@ def test_dag_cbor_decode_cbor_sequence_error() -> None:
 
 
 def test_decode_dag_cbor_multi() -> None:
-    # 0000 - two CBOR zeros (CBOR sequence), valid in DAG-CBOR
+    # 0000 - two CBOR zeros (CBOR sequence), valid only for decode_dag_cbor_multi
     dag_cbor = bytes.fromhex('0000')
     decoded = libipld.decode_dag_cbor_multi(dag_cbor)
 
