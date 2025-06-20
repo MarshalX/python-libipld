@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 
+
 def decode_cid(data: str | bytes) -> dict[str, Any]:
     """Decode a CID from either its string representation or raw bytes.
 
@@ -17,6 +18,7 @@ def decode_cid(data: str | bytes) -> dict[str, Any]:
             - digest: bytes (hash digest)
     """
 
+
 def encode_cid(data: str | bytes) -> str:
     """Encode a CID to its string representation.
 
@@ -26,6 +28,7 @@ def encode_cid(data: str | bytes) -> str:
     Returns:
         A CID string (e.g. 'bafy...')
     """
+
 
 def decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]]:
     """Decode a CAR file.
@@ -39,6 +42,7 @@ def decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]
         - blocks: dict mapping CID bytes to block data
     """
 
+
 def decode_dag_cbor(data: bytes) -> Any:
     """Decode DAG-CBOR data to Python objects.
 
@@ -48,6 +52,7 @@ def decode_dag_cbor(data: bytes) -> Any:
     Returns:
         A Python object
     """
+
 
 def decode_dag_cbor_multi(data: bytes) -> list[Any]:
     """Decode multiple DAG-CBOR objects from bytes.
@@ -59,6 +64,7 @@ def decode_dag_cbor_multi(data: bytes) -> list[Any]:
         A list of Python objects
     """
 
+
 def encode_dag_cbor(data: Any) -> bytes:
     """Encode Python objects to DAG-CBOR.
 
@@ -69,11 +75,12 @@ def encode_dag_cbor(data: Any) -> bytes:
         Raw DAG-CBOR bytes
     """
 
+
 def decode_multibase(data: str) -> tuple[str, bytes]:
     """Decode multibase-encoded data.
 
     Args:
-        data: Multibase-encoded string (e.g. 'u' for base58btc)
+        data: Multibase-encoded string (e.g. 'ueWVzIG1hbmkgIQ')
 
     Returns:
         A tuple containing:
@@ -81,12 +88,13 @@ def decode_multibase(data: str) -> tuple[str, bytes]:
         - data: bytes (the decoded data)
     """
 
-def encode_multibase(code: str, data: Any) -> str:
+
+def encode_multibase(code: str, data: bytes | str) -> str:
     """Encode data using multibase.
 
     Args:
-        code: str (base code, e.g. 'u' for base58btc)
-        data: Any Python object that can be converted to bytes
+        code: Base code (e.g. 'u' for base58btc)
+        data: Data to encode (bytes or string that can be converted to bytes)
 
     Returns:
         Multibase-encoded string

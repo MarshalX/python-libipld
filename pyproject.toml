@@ -38,7 +38,22 @@ classifiers = [
 "Author" = "https://github.com/MarshalX"
 
 [dependency-groups]
-dev = ["maturin", "pytest", "pytest-benchmark"]
+dev = ["maturin>=1.2,<2.0"]
+testing = [
+    { include-group = "dev" },
+    "pytest==8.3.5",
+    "pytest-benchmark==4.0.0",
+    "pytest-xdist==3.6.1",
+]
+codspeed = [
+    # only run on CI with the latest Python version
+    'pytest-codspeed==3.2.0; python_version == "3.13" and implementation_name == "cpython"',
+]
+
+all = [
+    { include-group = "dev" },
+    { include-group = "testing" },
+]
 
 [tool.pytest.ini_options]
 addopts = [
