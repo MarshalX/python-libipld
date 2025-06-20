@@ -89,7 +89,7 @@ def decode_multibase(data: str) -> tuple[str, bytes]:
     """
 
 
-def encode_multibase(code: str, data: bytes | str) -> str:
+def encode_multibase(code: str, data: str | bytes) -> str:
     """Encode data using multibase.
 
     Args:
