@@ -1,4 +1,0 @@
-pytest==8.3.3
-pytest-benchmark==4.0.0
-pytest-codspeed==3.0.0b4
-pytest-xdist==3.6.1

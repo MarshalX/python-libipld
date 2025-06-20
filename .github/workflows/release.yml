@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+    pull_request:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -124,8 +125,12 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Checkout repository.
+        uses: actions/checkout@v4
+
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.interpreter }}
 
@@ -151,11 +156,10 @@ jobs:
 
       - name: Gather PGO data.
         run: |
-          pip install -U pip
-          pip install -r pytests/requirements.txt 
+          uv sync --group testing
+          uv pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
 
-          pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
-          pytest . --benchmark-enable
+          uv run pytest . --benchmark-enable
 
           # we can't use github.workspace here because of Windows with backslashes
           rustup run 1.76.0 bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'

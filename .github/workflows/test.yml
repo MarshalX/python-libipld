@@ -5,6 +5,9 @@ on: [ pull_request ]
 permissions:
   contents: read
 
+env:
+  UV_PYTHON: 3.8 # minimum supported version
+
 jobs:
   unit_tests:
     runs-on: ubuntu-latest
@@ -13,16 +16,16 @@ jobs:
       - name: Checkout repository.
         uses: actions/checkout@v4
 
-      - name: Set up Python.
-        uses: actions/setup-python@v5
-        with:
-          # minimum supported version
-          python-version: 3.8
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v6
 
       - name: Install dependencies.
-        run: |
-          pip install -r pytests/requirements.txt
-          pip install -v -e .
+        run: uv sync --group testing
+
+      - name: Compile.
+        run: uv pip install -v -e .
+        env:
+          RUST_BACKTRACE: 1
 
       - name: Run Tests.
-        run: pytest
+        run: uv run pytest

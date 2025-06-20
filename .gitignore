@@ -28,3 +28,6 @@ test.py
 __pycache__
 .benchmarks
 .pytest_cache
+
+# Build artifacts
+*.so

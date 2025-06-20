@@ -577,6 +577,7 @@ fn get_err(msg: &str, err: String) -> PyErr {
 }
 
 #[pymodule]
+#[pyo3(name = "_libipld")]
 fn libipld(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(encode_cid, m)?)?;
