@@ -21,15 +21,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.UV_PYTHON}}
+          python-version: ${{ env.UV_PYTHON }}
 
       - name: Install UV.
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-
-      - name: Install python dependencies.
-        run: uv sync --group testing
 
       - name: Install rust.
         id: rust-toolchain
@@ -40,23 +37,44 @@ jobs:
       - name: Cache rust.
         uses: Swatinem/rust-cache@v2
 
-      - name: Compile.
-        run: uv pip install -v -e .
+      - name: Build wheel with profile generation.
+        uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          args: --release --out pgo-wheel --interpreter ${{ env.UV_PYTHON }}
+          rust-toolchain: 1.76.0
+          docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
 
       - name: Gather PGO data.
-        run: uv run pytest . --benchmark-enable
+        run: |
+          uv sync --group testing
+          uv pip install libipld --no-index --no-deps --find-links pgo-wheel --force-reinstall
+
+          uv run pytest . --benchmark-enable
 
       - name: Prepare merged PGO data.
         run: rustup run 1.76.0 bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
 
-      - name: Compile with profile.
-        run: uv pip install -v -e .
+      - name: Build PGO-optimized wheel.
+        uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          args: --release --out dist --interpreter ${{ env.UV_PYTHON }}
+          rust-toolchain: 1.76.0
+          docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
 
-      - name: Run benchmarks.
+      - name: Find built wheel.
+        id: find_wheel
+        run: echo "path=$(ls dist/*.whl)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Install PGO wheel.
+        run: uv pip install ${{ steps.pgo-wheel.outputs.wheel }} --force-reinstall
+
+      - name: Run CodSpeed benchmarks.
         uses: CodSpeedHQ/action@v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
