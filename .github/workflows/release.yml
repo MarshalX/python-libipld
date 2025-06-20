@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - update-pyo3
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -30,10 +29,10 @@ jobs:
           - os: windows
             target: i686
             python-architecture: x86
-            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
           - os: windows
             target: aarch64
-            interpreter: 3.11 3.12 3.13 3.14
+            interpreter: 3.11 3.12 3.13
 
           - os: macos
             target: x86_64
@@ -52,13 +51,13 @@ jobs:
             target: aarch64
           - os: ubuntu
             target: armv7
-            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
           - os: ubuntu
             target: ppc64le
-            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
           - os: ubuntu
             target: s390x
-            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
 
           - os: ubuntu
             target: x86_64
@@ -91,7 +90,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           container: ${{ matrix.container }}
-          args: --release --out dist --interpreter ${{ matrix.maturin-interpreter || matrix.interpreter || '3.8 3.9 3.10 3.11 3.12 3.13 3.14 pypy3.9 pypy3.10 pypy3.11' }} ${{ matrix.extra-build-args }}
+          args: --release --out dist --interpreter ${{ matrix.maturin-interpreter || matrix.interpreter || '3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10 pypy3.11' }} ${{ matrix.extra-build-args }}
           rust-toolchain: 1.76.0
           docker-options: -e CI
 
@@ -110,7 +109,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
-        interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14' ]
+        interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13' ]
         exclude:
           # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
           - os: macos-14
