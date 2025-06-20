@@ -67,8 +67,8 @@ jobs:
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
 
-      - name: Find built wheel.
-        id: find_wheel
+      - name: Find PGO built wheel.
+        id: pgo-wheel
         run: echo "path=$(ls dist/*.whl)" | tee -a "$GITHUB_OUTPUT"
 
       - name: Install PGO wheel.
