@@ -51,18 +51,24 @@ fn map_key_cmp(a: &Vec<u8>, b: &Vec<u8>) -> std::cmp::Ordering {
     }
 }
 
-fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> {
+fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Result<Vec<(PyBackedStr, usize)>> {
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
     for i in 0..len {
-        let item = keys.get_item(i).unwrap();
-        let key = item.downcast::<PyString>().unwrap().to_owned();
-        let backed_str = PyBackedStr::try_from(key).unwrap();
+        let item = keys.get_item(i)?;
+        let key = match item.downcast::<PyString>() {
+            Ok(k) => k.to_owned(),
+            Err(_) => return Err(anyhow!("Map keys must be strings")),
+        };
+        let backed_str = match PyBackedStr::try_from(key) {
+            Ok(bs) => bs,
+            Err(_) => return Err(anyhow!("Failed to convert PyString to PyBackedStr")),
+        };
         keys_str.push((backed_str, i));
     }
 
     if keys_str.len() < 2 {
-        return keys_str;
+        return Ok(keys_str);
     }
 
     keys_str.sort_by(|a, b| {
@@ -78,7 +84,7 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Vec<(PyBackedStr, usize)> 
         }
     });
 
-    keys_str
+    Ok(keys_str)
 }
 
 fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
@@ -96,11 +102,13 @@ fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]
     }
 }
 
-fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Bound<'py, PyString> {
+fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Result<Bound<'py, PyString>> {
+    std::str::from_utf8(s).map_err(|e| anyhow!("Invalid UTF-8 string: {}", e))?;
+
     let ptr = s.as_ptr() as *const c_char;
     let len = s.len() as ffi::Py_ssize_t;
     unsafe {
-        Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked()
+        Ok(Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked())
     }
 }
 
@@ -129,7 +137,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            string_new_bound(py, &decode::read_bytes(r, len)?).into_pyobject(py)?.into()
+            string_new_bound(py, &decode::read_bytes(r, len)?)?.into_pyobject(py)?.into()
         }
         MajorKind::Array => {
             let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
@@ -167,7 +175,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
-                let key_py = string_new_bound(py, key.as_slice()).into_pyobject(py)?;
+                let key_py = string_new_bound(py, key.as_slice())?.into_pyobject(py)?;
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
@@ -252,7 +260,7 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         Ok(())
     } else if let Ok(map) = obj.downcast::<PyDict>() {
         let len = map.len();
-        let keys = sort_map_keys(&map.keys(), len);
+        let keys = sort_map_keys(&map.keys(), len)?;
         let values = map.values();
 
         encode::write_u64(w, MajorKind::Map, len as u64)?;
