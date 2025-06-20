@@ -38,7 +38,7 @@ classifiers = [
 "Author" = "https://github.com/MarshalX"
 
 [dependency-groups]
-dev = ["maturin==1.8.1"]
+dev = ["maturin>=1.2,<2.0"]
 testing = [
     { include-group = "dev" },
     "pytest==8.3.5",

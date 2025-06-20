@@ -128,6 +128,10 @@ jobs:
       - name: Checkout repository.
         uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5 # required for macos-13 with Python 3.8-3.10... otherwise UV uses PyPy...
+        with:
+          python-version: ${{ matrix.interpreter }}
+
       - name: Install UV.
         uses: astral-sh/setup-uv@v6
         with:
