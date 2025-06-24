@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - bump-rust
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -12,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  RUST_VERSION: "1.76.0"
+  RUST_VERSION: "1.87.0"
 
 jobs:
   build:
