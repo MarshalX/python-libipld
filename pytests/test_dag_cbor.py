@@ -246,3 +246,21 @@ def test_decode_dag_cbor_multi() -> None:
     assert len(decoded) == 2
     assert decoded[0] == 0
     assert decoded[1] == 0
+
+
+def test_encode_tag_positive_bignum() -> None:
+    bignum = 18446744073709551616
+
+    with pytest.raises(ValueError) as exc_info:
+         libipld.encode_dag_cbor(bignum)
+
+    assert 'number out of range' in str(exc_info.value).lower()
+
+
+def test_encode_tag_negative_bignum() -> None:
+    bignum = -18446744073709551617
+
+    with pytest.raises(ValueError) as exc_info:
+         libipld.encode_dag_cbor(bignum)
+
+    assert 'number out of range' in str(exc_info.value).lower()

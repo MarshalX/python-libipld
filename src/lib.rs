@@ -254,8 +254,16 @@ fn encode_dag_cbor_from_pyobject<'py, W: Write>(
         let i: i128 = obj.extract()?;
 
         if i.is_negative() {
+            if -(i + 1) > u64::MAX as i128 {
+                return Err(anyhow!("Number out of range"));
+            }
+
             encode::write_u64(w, MajorKind::NegativeInt, -(i + 1) as u64)?
         } else {
+            if i > u64::MAX as i128 {
+                return Err(anyhow!("Number out of range"));
+            }
+
             encode::write_u64(w, MajorKind::UnsignedInt, i as u64)?
         }
 
