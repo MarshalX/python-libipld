@@ -14,7 +14,7 @@ pub fn exec(iterations: u64) {
 
     for _ in 0..iterations {
         Python::with_gil(|gil| {
-            println!("{}", libipld::encode_dag_cbor(gil, &PyString::new_bound(gil, json_str)).is_ok());
+            println!("{}", libipld::encode_dag_cbor(gil, &PyString::new(gil, json_str)).is_ok());
         });
     }
 }

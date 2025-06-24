@@ -8,7 +8,7 @@ edition = "2021"
 libipld = { path = ".." }
 
 structopt = "0.3.26"
-clap = "4.5.1"
+clap = "4.5.29"
 
 [dependencies.pyo3]
-version = "0.22.2"
+version = "0.25.1"

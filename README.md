@@ -28,26 +28,32 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 
 ### Features
 
-- Decode DAG-CBOR (`decode_dag_cbor(bytes) -> dict`, `decode_dag_cbor_multi(bytes) -> list[dict]`)
-- Encode DAG-CBOR (`encode_dag_cbor(obj) -> bytes`)
-- Decode CID (`decode_cid(str | bytes) -> dict`). Accepts CID stringified form or CID raw byte form.
-- Encode CID (`encode_cid(bytes) -> str`). Encodes CID raw byte form to stringified form.
-- Decode Multibase (`decode_multibase(str) -> tuple[str, bytes]`). Returns base and data.
-- Encode Multibase (`encode_multibase(str, bytes) -> str`). Accepts base and data.
-- Decode CAR (`decode_car(bytes) -> tuple[dict, dict[str, dict]]`). Returns a header and blocks mapped by CID. CIDs in raw byte form.
+#### 🔗 CID (Content Identifier) Operations
+- **`decode_cid(data: str | bytes) -> dict`** - Decode CIDs from string representation (e.g., `'bafy...'`) or raw bytes into structured data containing version, codec, and hash information
+- **`encode_cid(data: str | bytes) -> str`** - Encode CID raw bytes to string representation, or return string CIDs as-is
 
-Note: stub file will be provided in the future.
+#### 📦 DAG-CBOR (Directed Acyclic Graph CBOR) Operations  
+- **`decode_dag_cbor(data: bytes) -> Any`** - Decode DAG-CBOR binary data into Python objects (dicts, lists, primitives)
+- **`decode_dag_cbor_multi(data: bytes) -> list[Any]`** - Decode multiple concatenated DAG-CBOR objects from a single byte stream
+- **`encode_dag_cbor(data: Any) -> bytes`** - Encode Python objects into DAG-CBOR binary format
 
-## Requirements
+#### 🌐 Multibase Operations
+- **`decode_multibase(data: str) -> tuple[str, bytes]`** - Decode multibase-encoded strings, returning the base identifier and decoded data
+- **`encode_multibase(code: str, data: str | bytes) -> str`** - Encode data using specified multibase encoding (e.g., base58btc with code `'u'`)
 
-- Python 3.7 or higher.
+#### 🚗 CAR (Content Addressable Archives) Operations
+- **`decode_car(data: bytes) -> tuple[dict, dict[bytes, dict]]`** - Decode CAR files into header metadata and a mapping of CID bytes to block data
 
-## Installing
+### Requirements
+
+- Python 3.8 or higher.
+
+### Installing
 
 You can install or upgrade `libipld` via
 
 ```bash
-pip install libipld
+pip install -U libipld
 ```
 
 ### Contributing
