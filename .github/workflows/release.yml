@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_VERSION: "1.76.0"
+
 jobs:
   build:
     name: Build on ${{ matrix.os }} (${{ matrix.target }} - ${{ matrix.manylinux || 'auto' }})
@@ -80,9 +83,10 @@ jobs:
 
       - name: Install rust
         id: rust-toolchain
-        uses: dtolnay/rust-toolchain@1.76.0
+        uses: dtolnay/rust-toolchain@master
         with:
           components: llvm-tools
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -90,7 +94,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           args: --release --out dist --interpreter ${{ matrix.interpreter || '3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10 pypy3.11' }}
-          rust-toolchain: 1.76.0
+          rust-toolchain: ${{ env.RUST_VERSION }}
           docker-options: -e CI
 
       - name: List wheels.
@@ -138,9 +142,10 @@ jobs:
 
       - name: Install rust.
         id: rust-toolchain
-        uses: dtolnay/rust-toolchain@1.76.0
+        uses: dtolnay/rust-toolchain@master
         with:
           components: llvm-tools
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Set RUST_HOST.
         shell: bash
@@ -151,7 +156,7 @@ jobs:
         with:
           manylinux: auto
           args: --release --out pgo-wheel --interpreter ${{ matrix.interpreter }}
-          rust-toolchain: 1.76.0
+          rust-toolchain: ${{ env.RUST_VERSION }}
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
@@ -164,7 +169,7 @@ jobs:
           uv run pytest . --benchmark-enable
 
           # we can't use github.workspace here because of Windows with backslashes
-          rustup run 1.76.0 bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
+          rustup run ${{ env.RUST_VERSION }} bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
       - name: Prepare merged PGO data.
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata
@@ -174,7 +179,7 @@ jobs:
         with:
           manylinux: auto
           args: --release --out dist --interpreter ${{ matrix.interpreter }}
-          rust-toolchain: 1.76.0
+          rust-toolchain: ${{ env.RUST_VERSION }}
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
