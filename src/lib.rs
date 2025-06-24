@@ -179,7 +179,11 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
-                dict.set_item(key_py, value_py)?;
+                // dict.set_item(key_py, value_py)?;
+                // TODO(MarshalX): add error check
+                unsafe {
+                    ffi::PyDict_SetItem(dict.as_ptr(), key_py.as_ptr(), value_py.as_ptr());
+                }
             }
 
             dict.into_pyobject(py)?.into()
