@@ -13,6 +13,7 @@ permissions:
 env:
   UV_FROZEN: true
   UV_PYTHON: 3.13 # use the latest version of Python because it is faster
+  RUST_VERSION: "1.87.0"
 
 jobs:
   benchmarks:
@@ -30,9 +31,10 @@ jobs:
 
       - name: Install rust.
         id: rust-toolchain
-        uses: dtolnay/rust-toolchain@1.76.0
+        uses: dtolnay/rust-toolchain@master
         with:
           components: llvm-tools
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Cache rust.
         uses: Swatinem/rust-cache@v2
@@ -42,7 +44,7 @@ jobs:
         with:
           manylinux: auto
           args: --release --out pgo-wheel --interpreter ${{ env.UV_PYTHON }}
-          rust-toolchain: 1.76.0
+          rust-toolchain: ${{ env.RUST_VERSION }}
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/profdata"
@@ -55,14 +57,14 @@ jobs:
           uv run pytest . --benchmark-enable
 
       - name: Prepare merged PGO data.
-        run: rustup run 1.76.0 bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
+        run: rustup run ${{ env.RUST_VERSION }} bash -c '$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/profdata'
 
       - name: Build PGO-optimized wheel.
         uses: PyO3/maturin-action@v1
         with:
           manylinux: auto
           args: --release --out dist --interpreter ${{ env.UV_PYTHON }}
-          rust-toolchain: 1.76.0
+          rust-toolchain: ${{ env.RUST_VERSION }}
           docker-options: -e CI
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
