@@ -1,6 +1,8 @@
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::os::raw::c_char;
-
+use std::collections::HashMap;
+use std::cell::RefCell;
+use tendril::StrTendril;
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
 use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
@@ -9,6 +11,10 @@ use byteorder::{BigEndian, ByteOrder};
 use multihash::Multihash;
 use pyo3::{ffi, prelude::*, types::*, BoundObject, PyObject, Python};
 use pyo3::pybacked::PyBackedStr;
+
+thread_local! {
+    static STRING_INTERNER: RefCell<HashMap<Vec<u8>, StrTendril>> = RefCell::new(HashMap::new());
+}
 
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     let hash = cid.hash();
@@ -102,13 +108,28 @@ fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]
     }
 }
 
-fn string_new_bound<'py>(py: Python<'py>, s: &[u8]) -> Result<Bound<'py, PyString>> {
+fn string_new_bound_interned<'py>(py: Python<'py>, s: &[u8]) -> Result<Bound<'py, PyString>> {
     std::str::from_utf8(s).map_err(|e| anyhow!("Invalid UTF-8 string: {}", e))?;
 
-    let ptr = s.as_ptr() as *const c_char;
-    let len = s.len() as ffi::Py_ssize_t;
-    unsafe {
-        Ok(Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked())
+    if s.len() <= 64 {
+        STRING_INTERNER.with(|interner| {
+            let mut interner = interner.borrow_mut();
+            let tendril = interner.entry(s.to_vec())
+                .or_insert_with(|| StrTendril::from(String::from_utf8_lossy(s).into_owned()));
+
+            let ptr = tendril.as_ptr() as *const c_char;
+            let len = tendril.len() as ffi::Py_ssize_t;
+            unsafe {
+                Ok(Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len))
+                   .downcast_into_unchecked())
+            }
+        })
+    } else {
+        let ptr = s.as_ptr() as *const c_char;
+        let len = s.len() as ffi::Py_ssize_t;
+        unsafe {
+            Ok(Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len)).downcast_into_unchecked())
+        }
     }
 }
 
@@ -137,7 +158,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
         }
         MajorKind::TextString => {
             let len = decode::read_uint(r, major)?;
-            string_new_bound(py, &decode::read_bytes(r, len)?)?.into_pyobject(py)?.into()
+            string_new_bound_interned(py, &decode::read_bytes(r, len)?)?.into_pyobject(py)?.into()
         }
         MajorKind::Array => {
             let len: ffi::Py_ssize_t = decode_len(decode::read_uint(r, major)?)?.try_into()?;
@@ -175,7 +196,7 @@ fn decode_dag_cbor_to_pyobject<R: Read + Seek>(
                     }
                 }
 
-                let key_py = string_new_bound(py, key.as_slice())?.into_pyobject(py)?;
+                let key_py = string_new_bound_interned(py, key.as_slice())?.into_pyobject(py)?;
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
