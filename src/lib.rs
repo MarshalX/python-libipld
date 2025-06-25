@@ -355,24 +355,77 @@ fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'p
 
 #[inline]
 fn read_u64_leb128<R: Read>(r: &mut R) -> Result<u64> {
-    let mut result = 0;
-    let mut shift = 0;
+    // Optimized version with unrolled first few iterations
+    // Most LEB128 values are 1-2 bytes, so we handle these cases directly
+
+    let mut buf = [0];
+    if let Err(_) = r.read_exact(&mut buf) {
+        return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
+    }
+
+    let byte = buf[0] as u64;
+    if (byte & 0x80) == 0 {
+        // Single byte case (most common)
+        return Ok(byte);
+    }
+
+    // Two byte case (second most common)
+    let mut result = byte & 0x7F;
+    if let Err(_) = r.read_exact(&mut buf) {
+        return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
+    }
+
+    let byte = buf[0] as u64;
+    if (byte & 0x80) == 0 {
+        result |= byte << 7;
+        return Ok(result);
+    }
+
+    // Three byte case
+    result |= (byte & 0x7F) << 7;
+    if let Err(_) = r.read_exact(&mut buf) {
+        return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
+    }
+
+    let byte = buf[0] as u64;
+    if (byte & 0x80) == 0 {
+        result |= byte << 14;
+        return Ok(result);
+    }
+
+    // Four byte case
+    result |= (byte & 0x7F) << 14;
+    if let Err(_) = r.read_exact(&mut buf) {
+        return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
+    }
+
+    let byte = buf[0] as u64;
+    if (byte & 0x80) == 0 {
+        result |= byte << 21;
+        return Ok(result);
+    }
+
+    // Fall back to loop for longer encodings (rare case)
+    result |= (byte & 0x7F) << 21;
+    let mut shift = 28;
 
     loop {
-        let mut buf = [0];
         if let Err(_) = r.read_exact(&mut buf) {
             return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
         }
 
         let byte = buf[0] as u64;
         if (byte & 0x80) == 0 {
-            result |= (byte) << shift;
+            result |= byte << shift;
             return Ok(result);
         } else {
             result |= (byte & 0x7F) << shift;
         }
 
         shift += 7;
+        if shift >= 64 {
+            return Err(anyhow!("LEB128 value too large for u64"));
+        }
     }
 }
 
