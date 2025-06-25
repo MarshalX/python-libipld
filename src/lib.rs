@@ -1,6 +1,6 @@
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::os::raw::c_char;
-
+use bstr::ByteSlice;
 use ::libipld::cbor::error::{LengthOutOfRange, NumberOutOfRange, UnknownTag};
 use ::libipld::cbor::{cbor, cbor::MajorKind, decode, encode};
 use ::libipld::cid::{Cid, Error as CidError, Result as CidResult, Version};
@@ -47,7 +47,7 @@ fn map_key_cmp(a: &Vec<u8>, b: &Vec<u8>) -> std::cmp::Ordering {
     if a.len() != b.len() {
         a.len().cmp(&b.len())
     } else {
-        a.cmp(b)
+        a.as_bstr().cmp(b.as_bstr())
     }
 }
 
