@@ -6,7 +6,6 @@ authors = [
     {name = "Ilya (Marshal)", email = "ilya@marshal.dev"}
 ]
 license = "MIT"
-repository = "https://github.com/MarshalX/python-libipld"
 readme = "README.md"
 keywords = ["library", "lib", "ipld", "cid", "multibase", "multihash", "dag", "cbor", "dag-cbor"]
 requires-python = ">=3.8"
@@ -34,6 +33,7 @@ classifiers = [
 
 [project.urls]
 "Homepage" = "https://github.com/MarshalX/python-libipld"
+"Repository" = "https://github.com/MarshalX/python-libipld"
 "Tracker" = "https://github.com/MarshalX/python-libipld/issues"
 "Author" = "https://github.com/MarshalX"
 
