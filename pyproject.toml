@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Software Development :: Pre-processors",
@@ -38,16 +39,19 @@ classifiers = [
 "Author" = "https://github.com/MarshalX"
 
 [dependency-groups]
-dev = ["maturin>=1.2,<2.0"]
+dev = ["maturin>=1.8.7,<2.0"]
 testing = [
     { include-group = "dev" },
-    "pytest==8.3.5",
-    "pytest-benchmark==4.0.0",
-    "pytest-xdist==3.6.1",
+    'pytest==8.3.5; python_version == "3.8"',
+    'pytest==8.4.1; python_version >= "3.9"',
+    'pytest-benchmark==4.0.0; python_version == "3.8"',
+    'pytest-benchmark==5.1.0; python_version >= "3.9"',
+    'pytest-xdist==3.6.1; python_version == "3.8"',
+    'pytest-xdist==3.8.0; python_version >= "3.9"',
 ]
 codspeed = [
     # only run on CI with the latest Python version
-    'pytest-codspeed==3.2.0; python_version == "3.13" and implementation_name == "cpython"',
+    'pytest-codspeed==3.2.0; python_version == "3.14" and implementation_name == "cpython"',
 ]
 
 all = [
@@ -68,5 +72,5 @@ bindings = "pyo3"
 features = ["pyo3/extension-module"]
 
 [build-system]
-requires = ["maturin>=1.2,<2.0"]
+requires = ["maturin>=1.8.7,<2.0"]
 build-backend = "maturin"
