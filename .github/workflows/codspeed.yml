@@ -12,7 +12,7 @@ permissions:
 
 env:
   UV_FROZEN: true
-  UV_PYTHON: 3.14 # use the latest version of Python because it is faster
+  UV_PYTHON: 3.13 # use the latest version of Python because it is faster FIXME(@MarshalX): update to 3.14 when CodSpeed supports it
   RUST_VERSION: "1.90.0"
 
 jobs:
