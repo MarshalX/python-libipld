@@ -12,8 +12,8 @@ permissions:
 
 env:
   UV_FROZEN: true
-  UV_PYTHON: 3.13 # use the latest version of Python because it is faster
-  RUST_VERSION: "1.87.0"
+  UV_PYTHON: 3.13 # use the latest version of Python because it is faster FIXME(@MarshalX): update to 3.14 when CodSpeed supports it
+  RUST_VERSION: "1.90.0"
 
 jobs:
   benchmarks:
@@ -77,7 +77,8 @@ jobs:
         run: uv pip install ${{ steps.pgo-wheel.outputs.path }} --force-reinstall
 
       - name: Run CodSpeed benchmarks.
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v4
         with:
+          mode: instrumentation
           token: ${{ secrets.CODSPEED_TOKEN }}
           run: uv run --group=codspeed pytest . --codspeed -n auto

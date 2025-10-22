@@ -1,9 +1,10 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version == '3.13.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.14' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
     "python_full_version < '3.9'",
 ]
 
@@ -131,9 +132,12 @@ source = { editable = "." }
 [package.dev-dependencies]
 all = [
     { name = "maturin" },
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-xdist" },
+    { name = "pytest", version = "8.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-benchmark", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "pytest-xdist", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-xdist", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
 ]
 codspeed = [
     { name = "pytest-codspeed", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
@@ -143,27 +147,36 @@ dev = [
 ]
 testing = [
     { name = "maturin" },
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-xdist" },
+    { name = "pytest", version = "8.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-benchmark", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "pytest-xdist", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pytest-xdist", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
 ]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
 all = [
-    { name = "maturin", specifier = ">=1.2,<2.0" },
-    { name = "pytest", specifier = "==8.3.5" },
-    { name = "pytest-benchmark", specifier = "==4.0.0" },
-    { name = "pytest-xdist", specifier = "==3.6.1" },
+    { name = "maturin", specifier = ">=1.8.7,<2.0" },
+    { name = "pytest", marker = "python_full_version == '3.8.*'", specifier = "==8.3.5" },
+    { name = "pytest", marker = "python_full_version >= '3.9'", specifier = "==8.4.1" },
+    { name = "pytest-benchmark", marker = "python_full_version == '3.8.*'", specifier = "==4.0.0" },
+    { name = "pytest-benchmark", marker = "python_full_version >= '3.9'", specifier = "==5.1.0" },
+    { name = "pytest-xdist", marker = "python_full_version == '3.8.*'", specifier = "==3.6.1" },
+    { name = "pytest-xdist", marker = "python_full_version >= '3.9'", specifier = "==3.8.0" },
 ]
-codspeed = [{ name = "pytest-codspeed", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'", specifier = "==3.2.0" }]
-dev = [{ name = "maturin", specifier = ">=1.2,<2.0" }]
+codspeed = [{ name = "pytest-codspeed", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'", specifier = "==4.1.1" }]
+dev = [{ name = "maturin", specifier = ">=1.8.7,<2.0" }]
 testing = [
-    { name = "maturin", specifier = ">=1.2,<2.0" },
-    { name = "pytest", specifier = "==8.3.5" },
-    { name = "pytest-benchmark", specifier = "==4.0.0" },
-    { name = "pytest-xdist", specifier = "==3.6.1" },
+    { name = "maturin", specifier = ">=1.8.7,<2.0" },
+    { name = "pytest", marker = "python_full_version == '3.8.*'", specifier = "==8.3.5" },
+    { name = "pytest", marker = "python_full_version >= '3.9'", specifier = "==8.4.1" },
+    { name = "pytest-benchmark", marker = "python_full_version == '3.8.*'", specifier = "==4.0.0" },
+    { name = "pytest-benchmark", marker = "python_full_version >= '3.9'", specifier = "==5.1.0" },
+    { name = "pytest-xdist", marker = "python_full_version == '3.8.*'", specifier = "==3.6.1" },
+    { name = "pytest-xdist", marker = "python_full_version >= '3.9'", specifier = "==3.8.0" },
 ]
 
 [[package]]
@@ -237,7 +250,8 @@ version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version == '3.13.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.14' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
@@ -275,14 +289,16 @@ wheels = [
 name = "pytest"
 version = "8.3.5"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-    { name = "iniconfig" },
-    { name = "packaging" },
+    { name = "colorama", marker = "python_full_version < '3.9' and sys_platform == 'win32'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.9'" },
+    { name = "iniconfig", marker = "python_full_version < '3.9'" },
+    { name = "packaging", marker = "python_full_version < '3.9'" },
     { name = "pluggy", version = "1.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
-    { name = "pluggy", version = "1.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli", marker = "python_full_version < '3.9'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/3c/c9d525a414d506893f0cd8a8d0de7706446213181570cdbd766691164e40/pytest-8.3.5.tar.gz", hash = "sha256:f4efe70cc14e511565ac476b57c279e12a855b11f48f212af1080ef2263d3845", size = 1450891, upload-time = "2025-03-02T12:54:54.503Z" }
 wheels = [
@@ -290,12 +306,38 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest"
+version = "8.4.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*' and implementation_name == 'cpython'",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
+]
+dependencies = [
+    { name = "colorama", marker = "python_full_version >= '3.9' and sys_platform == 'win32'" },
+    { name = "exceptiongroup", marker = "python_full_version >= '3.9' and python_full_version < '3.11'" },
+    { name = "iniconfig", marker = "python_full_version >= '3.9'" },
+    { name = "packaging", marker = "python_full_version >= '3.9'" },
+    { name = "pluggy", version = "1.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "pygments", marker = "python_full_version >= '3.9'" },
+    { name = "tomli", marker = "python_full_version >= '3.9' and python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/ba/45911d754e8eba3d5a841a5ce61a65a685ff1798421ac054f85aa8747dfb/pytest-8.4.1.tar.gz", hash = "sha256:7c67fd69174877359ed9371ec3af8a3d2b04741818c51e5e99cc1742251fa93c", size = 1517714, upload-time = "2025-06-18T05:48:06.109Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl", hash = "sha256:539c70ba6fcead8e78eebbf1115e8b589e7565830d7d006a8723f19ac8a0afb7", size = 365474, upload-time = "2025-06-18T05:48:03.955Z" },
+]
+
+[[package]]
 name = "pytest-benchmark"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
 dependencies = [
-    { name = "py-cpuinfo" },
-    { name = "pytest" },
+    { name = "py-cpuinfo", marker = "python_full_version < '3.9'" },
+    { name = "pytest", version = "8.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/08/e6b0067efa9a1f2a1eb3043ecd8a0c48bfeb60d3255006dcc829d72d5da2/pytest-benchmark-4.0.0.tar.gz", hash = "sha256:fb0785b83efe599a6a956361c0691ae1dbb5318018561af10f3e915caa0048d1", size = 334641, upload-time = "2022-10-25T21:21:55.686Z" }
 wheels = [
@@ -303,40 +345,79 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-benchmark"
+version = "5.1.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*' and implementation_name == 'cpython'",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
+]
+dependencies = [
+    { name = "py-cpuinfo", marker = "python_full_version >= '3.9'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/d0/a8bd08d641b393db3be3819b03e2d9bb8760ca8479080a26a5f6e540e99c/pytest-benchmark-5.1.0.tar.gz", hash = "sha256:9ea661cdc292e8231f7cd4c10b0319e56a2118e2c09d9f50e1b3d150d2aca105", size = 337810, upload-time = "2024-10-30T11:51:48.521Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/d6/b41653199ea09d5969d4e385df9bbfd9a100f28ca7e824ce7c0a016e3053/pytest_benchmark-5.1.0-py3-none-any.whl", hash = "sha256:922de2dfa3033c227c96da942d1878191afa135a29485fb942e85dff1c592c89", size = 44259, upload-time = "2024-10-30T11:51:45.94Z" },
+]
+
+[[package]]
 name = "pytest-codspeed"
-version = "3.2.0"
+version = "4.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cffi", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
-    { name = "pytest", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
     { name = "rich", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/03/98/16fe3895b1b8a6d537a89eecb120b97358df8f0002c6ecd11555d6304dc8/pytest_codspeed-3.2.0.tar.gz", hash = "sha256:f9d1b1a3b2c69cdc0490a1e8b1ced44bffbd0e8e21d81a7160cfdd923f6e8155", size = 18409, upload-time = "2025-01-31T14:28:26.165Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/ae/5d89a787151868d3ebd813b24a13fe4ac7e60148cf1b3454d351c8b99f69/pytest_codspeed-4.1.1.tar.gz", hash = "sha256:9acc3394cc8aafd4543193254831d87de6be79accfdbd43475919fdaa2fc8d81", size = 113149, upload-time = "2025-10-07T16:30:02.709Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/31/62b93ee025ca46016d01325f58997d32303752286bf929588c8796a25b13/pytest_codspeed-3.2.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c5165774424c7ab8db7e7acdb539763a0e5657996effefdf0664d7fd95158d34", size = 26802, upload-time = "2025-01-31T14:28:10.723Z" },
-    { url = "https://files.pythonhosted.org/packages/89/60/2bc46bdf8c8ddb7e59cd9d480dc887d0ac6039f88c856d1ae3d29a4e648d/pytest_codspeed-3.2.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9bd55f92d772592c04a55209950c50880413ae46876e66bd349ef157075ca26c", size = 25442, upload-time = "2025-01-31T14:28:11.774Z" },
-    { url = "https://files.pythonhosted.org/packages/31/56/1b65ba0ae1af7fd7ce14a66e7599833efe8bbd0fcecd3614db0017ca224a/pytest_codspeed-3.2.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4cf6f56067538f4892baa8d7ab5ef4e45bb59033be1ef18759a2c7fc55b32035", size = 26810, upload-time = "2025-01-31T14:28:12.657Z" },
-    { url = "https://files.pythonhosted.org/packages/23/e6/d1fafb09a1c4983372f562d9e158735229cb0b11603a61d4fad05463f977/pytest_codspeed-3.2.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:39a687b05c3d145642061b45ea78e47e12f13ce510104d1a2cda00eee0e36f58", size = 25442, upload-time = "2025-01-31T14:28:13.485Z" },
-    { url = "https://files.pythonhosted.org/packages/0b/8b/9e95472589d17bb68960f2a09cfa8f02c4d43c82de55b73302bbe0fa4350/pytest_codspeed-3.2.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:46a1afaaa1ac4c2ca5b0700d31ac46d80a27612961d031067d73c6ccbd8d3c2b", size = 27182, upload-time = "2025-01-31T14:28:15.828Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/18/82aaed8095e84d829f30dda3ac49fce4e69685d769aae463614a8d864cdd/pytest_codspeed-3.2.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c48ce3af3dfa78413ed3d69d1924043aa1519048dbff46edccf8f35a25dab3c2", size = 25933, upload-time = "2025-01-31T14:28:17.151Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/15/60b18d40da66e7aa2ce4c4c66d5a17de20a2ae4a89ac09a58baa7a5bc535/pytest_codspeed-3.2.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:66692506d33453df48b36a84703448cb8b22953eea51f03fbb2eb758dc2bdc4f", size = 27180, upload-time = "2025-01-31T14:28:18.056Z" },
-    { url = "https://files.pythonhosted.org/packages/51/bd/6b164d4ae07d8bea5d02ad664a9762bdb63f83c0805a3c8fe7dc6ec38407/pytest_codspeed-3.2.0-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:479774f80d0bdfafa16112700df4dbd31bf2a6757fac74795fd79c0a7b3c389b", size = 25923, upload-time = "2025-01-31T14:28:19.725Z" },
-    { url = "https://files.pythonhosted.org/packages/90/bb/5d73c59d750264863c25fc202bcc37c5f8a390df640a4760eba54151753e/pytest_codspeed-3.2.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:109f9f4dd1088019c3b3f887d003b7d65f98a7736ca1d457884f5aa293e8e81c", size = 26795, upload-time = "2025-01-31T14:28:22.021Z" },
-    { url = "https://files.pythonhosted.org/packages/65/17/d4bf207b63f1edc5b9c06ad77df565d186e0fd40f13459bb124304b54b1d/pytest_codspeed-3.2.0-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e2f69a03b52c9bb041aec1b8ee54b7b6c37a6d0a948786effa4c71157765b6da", size = 25433, upload-time = "2025-01-31T14:28:22.955Z" },
-    { url = "https://files.pythonhosted.org/packages/f1/9b/952c70bd1fae9baa58077272e7f191f377c86d812263c21b361195e125e6/pytest_codspeed-3.2.0-py3-none-any.whl", hash = "sha256:54b5c2e986d6a28e7b0af11d610ea57bd5531cec8326abe486f1b55b09d91c39", size = 15007, upload-time = "2025-01-31T14:28:24.458Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/b4/6e76539ef17e398c06464c6d92da1b8978b46180df5446cdb76e2293c254/pytest_codspeed-4.1.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:aa83a1a0aaeb6bdb9918a18294708eebe765a3b5a855adccf9213629d2a0d302", size = 261944, upload-time = "2025-10-07T16:29:50.024Z" },
+    { url = "https://files.pythonhosted.org/packages/43/6a/ba8aca4a07bb8f19fdeba752c7276b35cb63ff743695b137c2f68a53cf21/pytest_codspeed-4.1.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e6fe213b2589ffe6f2189b3b21ca14717c9346b226e6028d2e2b4d4d7dac750f", size = 249258, upload-time = "2025-10-07T16:29:52.694Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/13/be5ab2167d7fb477ba86061dfb6dee3b6feb698ef7d35e8912ba0cce94d5/pytest_codspeed-4.1.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:94b3bd5a71bfab4478e9a9b5058237cf2b34938570b43495093c2ea213175bd5", size = 261978, upload-time = "2025-10-07T16:29:53.671Z" },
+    { url = "https://files.pythonhosted.org/packages/43/7f/60445f5e9bdaff4b9da1d7e4964e34d87bc160867aec2d99c1119e38b3f8/pytest_codspeed-4.1.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cfc1efdbcc92fb4b4cbc8eaa8d7387664b063c17e025985ece4816100f1fff29", size = 249269, upload-time = "2025-10-07T16:29:54.907Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/bf/b1d78c982d575636b38688f284bfd6836f5f232d95cef661a6345a91cc7b/pytest_codspeed-4.1.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:506d446d2911e5188aca7be702c2850a9b8680a72ed241a633d7edaeef00ac13", size = 262202, upload-time = "2025-10-07T16:29:55.792Z" },
+    { url = "https://files.pythonhosted.org/packages/45/23/9ace1fcd72a84d845f522e06badada7d85f6a5a4d4aed54509b51af87068/pytest_codspeed-4.1.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1773c74394c98317c6846e9eb60c352222c031bdf1ded109f5c35772a3ce6dc2", size = 249554, upload-time = "2025-10-07T16:29:56.681Z" },
+    { url = "https://files.pythonhosted.org/packages/da/45/09fa57357d46e46de968554cd0a20e4a8b2a48971fec9564c215c67ebcde/pytest_codspeed-4.1.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4f8af528f7f950cb745971fc1e9f59ebc52cc4c51a7eac7a931577fd55d21b94", size = 262209, upload-time = "2025-10-07T16:29:57.659Z" },
+    { url = "https://files.pythonhosted.org/packages/65/e5/ac697d8e249be059d4bec9ebcb22a5626e0d18fd6944665b6d0edca3a508/pytest_codspeed-4.1.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:db8b2b71cabde1a7ae77a29a3ce67bcb852c28d5599b4eb7428fdb26cd067815", size = 249559, upload-time = "2025-10-07T16:29:58.58Z" },
+    { url = "https://files.pythonhosted.org/packages/28/17/f2b30533c67810a03b377383357ca0bb89f02bd2eb7f2bca7063c217181c/pytest_codspeed-4.1.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2db34904eab84b64f5618dc6aa6ed88b7991d30e27a632ae97c7503af550d721", size = 261935, upload-time = "2025-10-07T16:29:59.577Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/b9/356b52d2f2528438efea8c62ce879f0ac62075ff7fa50dc3ee3dca73f472/pytest_codspeed-4.1.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9a5d0167669ffbd96f38089674e050a5391d05af45f25bfa290ebf316657425e", size = 249247, upload-time = "2025-10-07T16:30:00.577Z" },
+    { url = "https://files.pythonhosted.org/packages/31/b0/6f0502ca6497e4c53f2f425b57854b759f29d186804a64d090d9ac2878ca/pytest_codspeed-4.1.1-py3-none-any.whl", hash = "sha256:a0a7aa318b09d87541f4f65db9cd473b53d4f1589598d883b238fe208ae2ac8b", size = 113601, upload-time = "2025-10-07T16:30:01.58Z" },
 ]
 
 [[package]]
 name = "pytest-xdist"
 version = "3.6.1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
 dependencies = [
-    { name = "execnet" },
-    { name = "pytest" },
+    { name = "execnet", marker = "python_full_version < '3.9'" },
+    { name = "pytest", version = "8.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/41/c4/3c310a19bc1f1e9ef50075582652673ef2bfc8cd62afef9585683821902f/pytest_xdist-3.6.1.tar.gz", hash = "sha256:ead156a4db231eec769737f57668ef58a2084a34b2e55c4a8fa20d861107300d", size = 84060, upload-time = "2024-04-28T19:29:54.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/82/1d96bf03ee4c0fdc3c0cbe61470070e659ca78dc0086fb88b66c185e2449/pytest_xdist-3.6.1-py3-none-any.whl", hash = "sha256:9ed4adfb68a016610848639bb7e02c9352d5d9f03d04809919e2dafc3be4cca7", size = 46108, upload-time = "2024-04-28T19:29:52.813Z" },
+]
+
+[[package]]
+name = "pytest-xdist"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*' and implementation_name == 'cpython'",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
+]
+dependencies = [
+    { name = "execnet", marker = "python_full_version >= '3.9'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
 ]
 
 [[package]]
@@ -408,7 +489,7 @@ name = "typing-extensions"
 version = "4.14.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.14' and implementation_name == 'cpython')",
+    "(python_full_version >= '3.9' and python_full_version < '3.13') or (python_full_version >= '3.9' and implementation_name != 'cpython') or (python_full_version >= '3.15' and implementation_name == 'cpython')",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d1/bc/51647cd02527e87d05cb083ccc402f93e441606ff1f01739a62c8ad09ba5/typing_extensions-4.14.0.tar.gz", hash = "sha256:8676b788e32f02ab42d9e7c61324048ae4c6d844a399eebace3d4979d75ceef4", size = 107423, upload-time = "2025-06-02T14:52:11.399Z" }
 wheels = [
