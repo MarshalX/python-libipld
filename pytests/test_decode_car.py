@@ -41,7 +41,7 @@ def test_decode_car_invalid_header_type() -> None:
         header_obj = libipld.encode_dag_cbor('strInsteadOfObj')
         libipld.decode_car(header_len + header_obj)
 
-    assert "cannot be converted to 'PyDict'" in str(exc_info.value)
+    assert "cannot be cast as 'dict'" in str(exc_info.value)
 
 
 def test_decode_car_invalid_header_version_key() -> None:
@@ -77,7 +77,7 @@ def test_decode_car_invalid_header_roots_value_type() -> None:
         header_obj = libipld.encode_dag_cbor({'version': 1, 'roots': 123})
         libipld.decode_car(header_len + header_obj)
 
-    assert "cannot be converted to 'PyList'" in str(exc_info.value)
+    assert "cannot be cast as 'list'" in str(exc_info.value)
 
 
 def test_decode_car_invalid_header_roots_value_empty_list() -> None:
