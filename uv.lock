@@ -13,7 +13,7 @@ name = "cffi"
 version = "1.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
+    { name = "pycparser", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fc/97/c783634659c2920c3fc70419e3af40972dbaf758daa229a7d6ea6135c90d/cffi-1.17.1.tar.gz", hash = "sha256:1c39c6016c32bc48dd54561950ebd6836e1670f2ae46128f67cf49e789c52824", size = 516621, upload-time = "2024-09-04T20:45:21.852Z" }
 wheels = [
@@ -140,7 +140,7 @@ all = [
     { name = "pytest-xdist", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
 ]
 codspeed = [
-    { name = "pytest-codspeed", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
+    { name = "pytest-codspeed", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
 dev = [
     { name = "maturin" },
@@ -167,7 +167,7 @@ all = [
     { name = "pytest-xdist", marker = "python_full_version == '3.8.*'", specifier = "==3.6.1" },
     { name = "pytest-xdist", marker = "python_full_version >= '3.9'", specifier = "==3.8.0" },
 ]
-codspeed = [{ name = "pytest-codspeed", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'", specifier = "==4.1.1" }]
+codspeed = [{ name = "pytest-codspeed", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'", specifier = "==4.1.1" }]
 dev = [{ name = "maturin", specifier = ">=1.8.7,<2.0" }]
 testing = [
     { name = "maturin", specifier = ">=1.8.7,<2.0" },
@@ -184,7 +184,7 @@ name = "markdown-it-py"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mdurl", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
+    { name = "mdurl", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/38/71/3b932df36c1a044d397a1f92d1cf91ee0a503d91e470cbd670aa66b07ed0/markdown-it-py-3.0.0.tar.gz", hash = "sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb", size = 74596, upload-time = "2023-06-03T06:41:14.443Z" }
 wheels = [
@@ -367,9 +367,9 @@ name = "pytest-codspeed"
 version = "4.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
-    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
-    { name = "rich", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
+    { name = "cffi", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
+    { name = "pytest", version = "8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
+    { name = "rich", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/ae/5d89a787151868d3ebd813b24a13fe4ac7e60148cf1b3454d351c8b99f69/pytest_codspeed-4.1.1.tar.gz", hash = "sha256:9acc3394cc8aafd4543193254831d87de6be79accfdbd43475919fdaa2fc8d81", size = 113149, upload-time = "2025-10-07T16:30:02.709Z" }
 wheels = [
@@ -425,8 +425,8 @@ name = "rich"
 version = "14.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markdown-it-py", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
-    { name = "pygments", marker = "python_full_version == '3.14.*' and implementation_name == 'cpython'" },
+    { name = "markdown-it-py", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
+    { name = "pygments", marker = "python_full_version == '3.13.*' and implementation_name == 'cpython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a1/53/830aa4c3066a8ab0ae9a9955976fb770fe9c6102117c8ec4ab3ea62d89e8/rich-14.0.0.tar.gz", hash = "sha256:82f1bc23a6a21ebca4ae0c45af9bdbc492ed20231dcb63f297d6d1021a9d5725", size = 224078, upload-time = "2025-03-30T14:15:14.23Z" }
 wheels = [
