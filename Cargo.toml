@@ -16,10 +16,8 @@ crate-type = ["rlib", "cdylib"]
 pyo3 = { version = "0.27.1", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.14"
 anyhow = "1.0.100"
-libipld = { version = "0.16.0", features = ["dag-cbor"] }
-multibase = "0.9.2"
-byteorder = "1.5.0"
-multihash = "0.18.1"
+cid = "0.11.1"
+cbor4ii = { version = "1.2.0", features = ["use_alloc"] }
 
 [workspace]
 members = [ "profiling" ]
