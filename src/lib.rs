@@ -172,7 +172,7 @@ where
         .as_ref()
         .first()
         .copied()
-        .ok_or(anyhow!("end of data"))
+        .ok_or_else(|| anyhow!("end of data"))
 }
 
 fn decode_dag_cbor_to_pyobject<'de, R: dec::Read<'de>>(
