@@ -28,3 +28,6 @@ debug = false
 incremental = false
 lto = true
 opt-level = 3
+
+[patch.crates-io]
+cbor4ii = { git = "https://github.com/quininer/cbor4ii" }
