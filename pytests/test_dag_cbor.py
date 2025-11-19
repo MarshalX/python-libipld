@@ -162,7 +162,7 @@ def test_dag_cbor_decode_invalid_utf8() -> None:
         libipld.decode_dag_cbor(bytes.fromhex('62c328'))
 
 
-    assert 'Invalid UTF-8 string' in str(exc_info.value)
+    assert 'utf-8' in str(exc_info.value)
 
 
 def test_dab_cbor_decode_map_int_key() -> None:

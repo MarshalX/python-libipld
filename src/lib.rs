@@ -1,5 +1,3 @@
-use std::os::raw::c_char;
-
 use anyhow::{anyhow, Result};
 use cbor4ii::core::{
     dec::{self, Decode, Read},
@@ -73,7 +71,7 @@ fn cid_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
     dict_obj
 }
 
-fn map_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
     /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
     - If two keys have different lengths, the shorter one sorts earlier;
     - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
@@ -136,17 +134,6 @@ fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]
     }
 }
 
-fn string_new_bound<'py>(py: Python<'py>, s: &str) -> Result<Bound<'py, PyString>> {
-    let ptr = s.as_ptr() as *const c_char;
-    let len = s.len() as ffi::Py_ssize_t;
-    unsafe {
-        Ok(
-            Bound::from_owned_ptr(py, ffi::PyUnicode_FromStringAndSize(ptr, len))
-                .cast_into_unchecked(),
-        )
-    }
-}
-
 // Based on cbor4ii code.
 fn peek_one<'de, R: dec::Read<'de>>(r: &mut R) -> Result<u8>
 where
@@ -181,18 +168,20 @@ where
     let byte = peek_one(r)?;
     return Ok(match dec::if_major(byte) {
         major::UNSIGNED => u64::decode(r)?.into_pyobject(py)?.into(),
-        major::NEGATIVE => {
-            i128::decode(r)?.into_pyobject(py)?.into()
-        }
+        major::NEGATIVE => i128::decode(r)?.into_pyobject(py)?.into(),
         major::BYTES => PyBytes::new(py, <types::Bytes<&[u8]>>::decode(r)?.0)
             .into_pyobject(py)?
             .into(),
-        major::STRING => string_new_bound(
-            py,
-            <&str>::decode(r).map_err(|_| anyhow!("Invalid UTF-8 string"))?,
-        )?
-        .into_pyobject(py)?
-        .into(),
+        major::STRING => {
+            // The UTF-8 validation is done when it's converted into a Python string
+            PyString::from_bytes(
+                py,
+                <types::UncheckedStr<&[u8]>>::decode(r)
+                    .map_err(|_| anyhow!("Cannot decode as bytes"))?
+                    .0,
+            )?
+            .into()
+        }
         major::ARRAY => {
             let len: ffi::Py_ssize_t =
                 types::Array::len(r)?.expect("contains length").try_into()?;
@@ -216,10 +205,13 @@ where
             let len = types::Map::len(r)?.expect("contains length");
             let dict = PyDict::new(py);
 
-            let mut prev_key: Option<&str> = None;
+            let mut prev_key: Option<&[u8]> = None;
             for _ in 0..len {
-                // DAG-CBOR keys are always strings
-                let key = <&str>::decode(r).map_err(|_| anyhow!("Map keys must be strings"))?;
+                // DAG-CBOR keys are always strings. Python does the UTF-8 validation when creating
+                // the string.
+                let key = <types::UncheckedStr<&[u8]>>::decode(r)
+                    .map_err(|_| anyhow!("Map keys must be strings"))?
+                    .0;
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
@@ -228,7 +220,7 @@ where
                     }
                 }
 
-                let key_py = string_new_bound(py, key)?.into_pyobject(py)?;
+                let key_py = PyString::from_bytes(py, key)?;
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
