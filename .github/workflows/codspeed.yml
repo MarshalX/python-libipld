@@ -17,7 +17,7 @@ env:
 
 jobs:
   benchmarks:
-    runs-on: codspeed-macro
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5 # required for correct CodSpeed integration
@@ -79,6 +79,6 @@ jobs:
       - name: Run CodSpeed benchmarks.
         uses: CodSpeedHQ/action@v4
         with:
-          mode: walltime
+          mode: simulation
           token: ${{ secrets.CODSPEED_TOKEN }}
           run: uv run --group=codspeed pytest . --codspeed
