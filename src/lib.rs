@@ -1,9 +1,10 @@
+use std::io::{self, Write};
+
 use anyhow::{anyhow, Result};
 use cbor4ii::core::{
     dec::{self, Decode, Read},
     enc::{self, Encode},
     major, types,
-    utils::BufWriter,
 };
 use cid::{multibase, Cid};
 use pyo3::pybacked::PyBackedStr;
@@ -16,6 +17,32 @@ mod marker {
     pub const NULL: u8 = 0xf6; // simple(22)
     pub const F32: u8 = 0xfa;
     pub const F64: u8 = 0xfb;
+}
+
+struct BufWriter<W: io::Write>(io::BufWriter<W>);
+
+impl<W: Write> BufWriter<W> {
+    pub fn new(inner: W) -> Self {
+        BufWriter(io::BufWriter::new(inner))
+    }
+
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+
+    pub fn get_ref(&self) -> &W {
+        self.0.get_ref()
+    }
+}
+
+impl<W: Write> enc::Write for BufWriter<W> {
+    type Error = io::Error;
+
+    #[inline]
+    fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+        self.0.write_all(input)?;
+        Ok(())
+    }
 }
 
 // Based on cbor4ii/src/utils.rs.
@@ -557,7 +584,10 @@ pub fn encode_dag_cbor<'py>(
     if let Err(e) = encode_dag_cbor_from_pyobject(py, data, &mut buf) {
         return Err(get_err("Failed to encode DAG-CBOR", e.to_string()));
     }
-    Ok(PyBytes::new(py, buf.buffer()))
+    if let Err(e) = buf.flush() {
+        return Err(get_err("Failed to flush buffer", e.to_string()));
+    }
+    Ok(PyBytes::new(py, buf.get_ref()))
 }
 
 fn get_cid_from_py_any(data: &Bound<PyAny>) -> PyResult<Cid> {
