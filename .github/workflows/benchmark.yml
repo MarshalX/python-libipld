@@ -1,5 +1,11 @@
 name: Benchmark
-on: [ pull_request, push, workflow_dispatch ]
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,41 +35,21 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: Run Benchmarks.
-        run: uv run pytest . --benchmark-enable --benchmark-json=output.json
+        run: uv run pytest . -m benchmark_main --benchmark-enable --benchmark-json=output.json
 
-      - name: Upload benchmark artifact
-        uses: actions/upload-artifact@v4
+      - name: Download previous benchmark data.
+        uses: actions/cache@v4
         with:
-          name: benchmark-output
-          path: output.json
+          path: ./benchmark-data
+          key: benchmark-${{ github.base_ref || github.ref_name }}
 
-      - name: Append benchmark table to summary
-        if: always()
-        run: |
-          if [ -f output.json ]; then
-            echo '## Pytest Benchmark Results' >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '
-              def fmt_ns(v):
-                if v >= 1e9 then
-                  (100 * (v / 1e9) | round / 100 | tostring) + " s"
-                elif v >= 1e6 then
-                  (100 * (v / 1e6) | round / 100 | tostring) + " ms"
-                elif v >= 1e3 then
-                  (100 * (v / 1e3) | round / 100 | tostring) + " µs"
-                else
-                  (100 * v          | round / 100 | tostring) + " ns"
-                end;
-
-              .benchmarks
-              | ("| Benchmark | Mean | Min | Max | Rounds | Iterations |", "|---|---:|---:|---:|---:|---:|") ,
-                (.[] | "| " + .name +
-                " | " + fmt_ns(.stats.mean * 1e9) +
-                " | " + fmt_ns(.stats.min  * 1e9) +
-                " | " + fmt_ns(.stats.max  * 1e9) +
-                " | " + (.stats.rounds     | tostring) +
-                " | " + (.stats.iterations | tostring) + " |")
-            ' output.json >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'No benchmark output.json found.' >> "$GITHUB_STEP_SUMMARY"
-          fi
+      - name: Benchmark results.
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: output.json
+          external-data-json-path: ./benchmark-data/output.json
+          summary-always: true
+          fail-on-alert: true
+          skip-fetch-gh-pages: true
+          save-data-file: ${{ github.event_name != 'pull_request' }}
