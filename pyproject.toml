@@ -60,6 +60,9 @@ all = [
 ]
 
 [tool.pytest.ini_options]
+markers = [
+    'benchmark_main: marks tests as main benchmarks to run selectively'
+]
 addopts = [
     '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',
     '--benchmark-disable',  # use --benchmark-enable

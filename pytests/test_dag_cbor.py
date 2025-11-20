@@ -101,11 +101,13 @@ def test_dag_cbor_decode(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
 
 
+@pytest.mark.benchmark_main
 @pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode_real_data(benchmark, data) -> None:
     _dag_cbor_encode(benchmark, data)
 
 
+@pytest.mark.benchmark_main
 @pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_decode_real_data(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
@@ -116,6 +118,7 @@ def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
     _dag_cbor_decode(benchmark, data)
 
 
+@pytest.mark.benchmark_main
 def test_dag_cbor_decode_torture_cids(benchmark) -> None:
     dag_cbor = open(_TORTURE_CIDS_DAG_CBOR_PATH, 'rb').read()
     benchmark(libipld.decode_dag_cbor, dag_cbor)
