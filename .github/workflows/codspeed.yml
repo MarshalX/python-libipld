@@ -79,6 +79,6 @@ jobs:
       - name: Run CodSpeed benchmarks.
         uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
+          mode: walltime
           token: ${{ secrets.CODSPEED_TOKEN }}
           run: uv run --group=codspeed pytest . --codspeed
