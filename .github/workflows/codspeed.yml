@@ -81,4 +81,4 @@ jobs:
         with:
           mode: instrumentation
           token: ${{ secrets.CODSPEED_TOKEN }}
-          run: uv run --group=codspeed pytest . --codspeed -n auto
+          run: uv run --group=codspeed pytest . --codspeed
