@@ -17,7 +17,7 @@ env:
 
 jobs:
   benchmarks:
-    runs-on: ubuntu-latest
+    runs-on: codspeed-macro
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5 # required for correct CodSpeed integration
