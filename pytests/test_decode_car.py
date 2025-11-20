@@ -14,6 +14,7 @@ def car() -> bytes:
     return load_car_fixture(_DID, _REPO_CAR_PATH)
 
 
+@pytest.mark.benchmark_main
 def test_decode_car(benchmark, car) -> None:
     header, blocks = benchmark(libipld.decode_car, car)
 
