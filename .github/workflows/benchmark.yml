@@ -1,0 +1,69 @@
+name: Benchmark
+on: [ pull_request, push, workflow_dispatch ]
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: true
+  UV_PYTHON: 3.14
+  RUST_VERSION: "1.90.0"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository.
+        uses: actions/checkout@v4
+
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies.
+        run: uv sync --group testing
+
+      - name: Compile.
+        run: uv pip install -v -e .
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run Benchmarks.
+        run: uv run pytest . --benchmark-enable --benchmark-json=output.json
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-output
+          path: output.json
+
+      - name: Append benchmark table to summary
+        if: always()
+        run: |
+          if [ -f output.json ]; then
+            echo '## Pytest Benchmark Results' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '
+              def fmt_ns(v):
+                if v >= 1e9 then
+                  (100 * (v / 1e9) | round / 100 | tostring) + " s"
+                elif v >= 1e6 then
+                  (100 * (v / 1e6) | round / 100 | tostring) + " ms"
+                elif v >= 1e3 then
+                  (100 * (v / 1e3) | round / 100 | tostring) + " µs"
+                else
+                  (100 * v          | round / 100 | tostring) + " ns"
+                end;
+
+              .benchmarks
+              | ("| Benchmark | Mean | Min | Max | Rounds | Iterations |", "|---|---:|---:|---:|---:|---:|") ,
+                (.[] | "| " + .name +
+                " | " + fmt_ns(.stats.mean * 1e9) +
+                " | " + fmt_ns(.stats.min  * 1e9) +
+                " | " + fmt_ns(.stats.max  * 1e9) +
+                " | " + (.stats.rounds     | tostring) +
+                " | " + (.stats.iterations | tostring) + " |")
+            ' output.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No benchmark output.json found.' >> "$GITHUB_STEP_SUMMARY"
+          fi
