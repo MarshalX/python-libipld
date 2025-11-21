@@ -12,7 +12,7 @@ permissions:
 
 env:
   UV_FROZEN: true
-  UV_PYTHON: 3.13 # use the latest version of Python because it is faster FIXME(@MarshalX): update to 3.14 when CodSpeed supports it
+  UV_PYTHON: 3.14
   RUST_VERSION: "1.90.0"
 
 jobs:
@@ -79,6 +79,6 @@ jobs:
       - name: Run CodSpeed benchmarks.
         uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
+          mode: simulation
           token: ${{ secrets.CODSPEED_TOKEN }}
-          run: uv run --group=codspeed pytest . --codspeed -n auto
+          run: uv run --group=codspeed pytest . --codspeed
