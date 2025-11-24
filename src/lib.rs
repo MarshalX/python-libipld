@@ -4,20 +4,11 @@ use anyhow::{anyhow, Result};
 use cbor4ii::core::{
     dec::{self, Decode, Read},
     enc::{self, Encode},
-    major, types,
+    major, marker, types,
 };
 use cid::{multibase, Cid};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::{ffi, prelude::*, types::*, BoundObject, Python};
-
-// Copy from cbor4ii/src/core.rs.
-mod marker {
-    pub const FALSE: u8 = 0xf4; // simple(20)
-    pub const TRUE: u8 = 0xf5; // simple(21)
-    pub const NULL: u8 = 0xf6; // simple(22)
-    pub const F32: u8 = 0xfa;
-    pub const F64: u8 = 0xfb;
-}
 
 struct BufWriter<W: io::Write>(io::BufWriter<W>);
 

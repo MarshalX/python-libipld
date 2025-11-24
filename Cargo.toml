@@ -17,7 +17,7 @@ pyo3 = { version = "0.27.1", features = ["generate-import-lib", "anyhow"] }
 python3-dll-a = "0.2.14"
 anyhow = "1.0.100"
 cid = "0.11.1"
-cbor4ii = { version = "1.2.0", features = ["use_alloc"] }
+cbor4ii = { version = "1.2.1" }
 
 [workspace]
 members = [ "profiling" ]
@@ -28,6 +28,3 @@ debug = false
 incremental = false
 lto = true
 opt-level = 3
-
-[patch.crates-io]
-cbor4ii = { git = "https://github.com/quininer/cbor4ii" }
