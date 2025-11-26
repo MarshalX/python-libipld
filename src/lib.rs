@@ -184,7 +184,7 @@ where
     }
 
     let byte = peek_one(r)?;
-    return Ok(match dec::if_major(byte) {
+    Ok(match dec::if_major(byte) {
         major::UNSIGNED => u64::decode(r)?.into_pyobject(py)?.into(),
         major::NEGATIVE => i128::decode(r)?.into_pyobject(py)?.into(),
         major::BYTES => PyBytes::new(py, <types::Bytes<&[u8]>>::decode(r)?.0)
@@ -233,7 +233,7 @@ where
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
-                    if map_key_cmp(&prev_key, &key) != std::cmp::Ordering::Less {
+                    if map_key_cmp(prev_key, key) != std::cmp::Ordering::Less {
                         return Err(anyhow!("Map keys must be sorted and unique"));
                     }
                 }
@@ -256,11 +256,11 @@ where
             let cid = <types::Bytes<&[u8]>>::decode(r)?.0;
 
             // Parse the CID for validation. They have a zero byte at the front, strip it off.
-            if let Err(_) = Cid::try_from(&cid[1..]) {
+            if Cid::try_from(&cid[1..]).is_err() {
                 return Err(anyhow!("Invalid CID"));
             }
 
-            PyBytes::new(py, &cid).into_pyobject(py)?.into()
+            PyBytes::new(py, cid).into_pyobject(py)?.into()
         }
         major::SIMPLE => match byte {
             // FIXME(MarshalX): should be more clear for bool?
@@ -297,7 +297,7 @@ where
             _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
         _ => return Err(anyhow!("Invalid major type".to_string())),
-    });
+    })
 }
 
 fn encode_dag_cbor_from_pyobject<'py, W: enc::Write>(
@@ -538,8 +538,7 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
             .fill(1)
             .expect("SliceReader never fails")
             .as_ref()
-            .len()
-            == 0
+            .is_empty()
         {
             Ok(py_object)
         } else {
