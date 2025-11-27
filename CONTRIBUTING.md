@@ -19,7 +19,7 @@ uv pip install -v -e .
 uv run pytest
 
 # run the most important benchmarks
-uv run pytest . -m benchmark_main
+uv run pytest . -m benchmark_main --benchmark-enable
 
 # run lint and fmt
 cargo clippy && cargo fmt
