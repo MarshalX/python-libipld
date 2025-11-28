@@ -50,8 +50,8 @@ testing = [
     'pytest-xdist==3.8.0; python_version >= "3.9"',
 ]
 codspeed = [
-    # only run on CI with the latest Python version FIXME(@MarshalX): update to 3.14 when CodSpeed supports it
-    'pytest-codspeed==4.1.1; python_version == "3.13" and implementation_name == "cpython"',
+    # only run on CI with the latest Python version
+    'pytest-codspeed==4.2.0; python_version == "3.14" and implementation_name == "cpython"',
 ]
 
 all = [
@@ -60,6 +60,9 @@ all = [
 ]
 
 [tool.pytest.ini_options]
+markers = [
+    'benchmark_main: marks tests as main benchmarks to run selectively'
+]
 addopts = [
     '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',
     '--benchmark-disable',  # use --benchmark-enable

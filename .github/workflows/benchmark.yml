@@ -1,0 +1,55 @@
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: true
+  UV_PYTHON: 3.14
+  RUST_VERSION: "1.90.0"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository.
+        uses: actions/checkout@v4
+
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies.
+        run: uv sync --group testing
+
+      - name: Compile.
+        run: uv pip install -v -e .
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run Benchmarks.
+        run: uv run pytest . -m benchmark_main --benchmark-enable --benchmark-json=output.json
+
+      - name: Download previous benchmark data.
+        uses: actions/cache@v4
+        with:
+          path: ./benchmark-data
+          key: benchmark-${{ github.base_ref || github.ref_name }}
+
+      - name: Benchmark results.
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: output.json
+          external-data-json-path: ./benchmark-data/output.json
+          summary-always: true
+          fail-on-alert: true
+          skip-fetch-gh-pages: true
+          save-data-file: ${{ github.event_name != 'pull_request' }}
