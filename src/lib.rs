@@ -53,14 +53,18 @@ impl<'de> dec::Read<'de> for SliceReader<'de> {
 
     #[inline]
     fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-        let len = core::cmp::min(self.buf.len(), want);
-        Ok(dec::Reference::Long(&self.buf[..len]))
+        let buf = self.buf;
+        let buf_len = buf.len();
+        let len = if buf_len < want { buf_len } else { want };
+        Ok(dec::Reference::Long(&buf[..len]))
     }
 
     #[inline]
     fn advance(&mut self, n: usize) {
-        let len = core::cmp::min(self.buf.len(), n);
-        self.buf = &self.buf[len..];
+        let buf = self.buf;
+        let buf_len = buf.len();
+        let len = if buf_len < n { buf_len } else { n };
+        self.buf = &buf[len..];
     }
 }
 
@@ -221,9 +225,9 @@ where
         }
         major::MAP => {
             let len = types::Map::len(r)?.expect("contains length");
-            let dict = PyDict::new(py);
-
             let mut prev_key: Option<&[u8]> = None;
+
+            let mut items: Vec<(Py<PyAny>, Py<PyAny>)> = Vec::with_capacity(len);
             for _ in 0..len {
                 // DAG-CBOR keys are always strings. Python does the UTF-8 validation when creating
                 // the string.
@@ -242,9 +246,17 @@ where
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
-                dict.set_item(key_py, value_py)?;
+
+                items.push((key_py.unbind().into(), value_py));
             }
 
+            let seq = PyList::empty(py);
+            for (key, value) in items {
+                let pair = PyTuple::new(py, &[key, value])?;
+                seq.append(pair)?;
+            }
+
+            let dict = PyDict::from_sequence(&seq)?;
             dict.into_pyobject(py)?.into()
         }
         major::TAG => {
@@ -429,18 +441,35 @@ where
     let mut shift = 0;
 
     loop {
-        let byte =
-            peek_one(r).map_err(|_| anyhow!("Unexpected EOF while reading ULEB128 number."))?;
-        r.advance(1);
+        // Read up to 10 bytes at once (max length of u64 LEB128)
+        let reference = r
+            .fill(10)
+            .map_err(|_| anyhow!("Unexpected EOF while reading ULEB128 number."))?;
+        let buf = reference.as_ref();
 
-        if (byte & 0x80) == 0 {
-            result |= (byte as u64) << shift;
-            return Ok(result);
-        } else {
-            result |= (byte as u64 & 0x7F) << shift;
+        if buf.is_empty() {
+            return Err(anyhow!("Unexpected EOF while reading ULEB128 number."));
         }
 
-        shift += 7;
+        let mut consumed = 0;
+        for &byte in buf {
+            consumed += 1;
+
+            if (byte & 0x80) == 0 {
+                result |= (byte as u64) << shift;
+                r.advance(consumed);
+                return Ok(result);
+            } else {
+                result |= (byte as u64 & 0x7F) << shift;
+                shift += 7;
+                if shift >= 64 {
+                    return Err(anyhow!("ULEB128 is too large for u64"));
+                }
+            }
+        }
+
+        // All bytes in this chunk had continuation bit set; advance and continue
+        r.advance(consumed);
     }
 }
 
