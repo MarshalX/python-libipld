@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{self, Cursor, Write};
 
 use anyhow::{anyhow, Result};
 use cbor4ii::core::{
@@ -499,7 +499,10 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             break;
         }
 
-        let cid_result = Cid::read_bytes(&mut buf.buf);
+        let cid_bytes_before = buf.buf;
+        let mut cursor = Cursor::new(cid_bytes_before);
+
+        let cid_result = Cid::read_bytes(&mut cursor);
         let Ok(cid) = cid_result else {
             return Err(get_err(
                 "Failed to read CID of block",
@@ -514,6 +517,10 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             ));
         }
 
+        let consumed = cursor.position() as usize;
+        buf.advance(consumed);
+        let cid_raw = &cid_bytes_before[..consumed];
+
         let block_result = decode_dag_cbor_to_pyobject(py, buf, 0);
         let Ok(block) = block_result else {
             return Err(get_err(
@@ -522,8 +529,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             ));
         };
 
-        // FIXME(MarshalX): to_bytes allocates
-        let key = PyBytes::new(py, &cid.to_bytes()).into_pyobject(py)?;
+        let key = PyBytes::new(py, cid_raw).into_pyobject(py)?;
         parsed_blocks.set_item(key, block)?;
     }
 
