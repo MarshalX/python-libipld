@@ -103,40 +103,38 @@ fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
 
 fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Result<Vec<(PyBackedStr, usize)>> {
     // Returns key and index.
-    unsafe {
-        let mut keys_str = Vec::with_capacity(len);
-        for i in 0..len {
-            let item = keys.get_item_unchecked(i);
-            let key = match item.cast::<PyString>() {
-                Ok(k) => k.to_owned(),
-                Err(_) => return Err(anyhow!("Map keys must be strings")),
-            };
-            let backed_str = match PyBackedStr::try_from(key) {
-                Ok(bs) => bs,
-                Err(_) => return Err(anyhow!("Failed to convert PyString to PyBackedStr")),
-            };
-            keys_str.push((backed_str, i));
-        }
-
-        if keys_str.len() < 2 {
-            return Ok(keys_str);
-        }
-
-        keys_str.sort_by(|a, b| {
-            // sort_unstable_by performs bad
-            let (s1, _) = a;
-            let (s2, _) = b;
-
-            // sorted length-first by the byte representation of the string keys
-            if s1.len() != s2.len() {
-                s1.len().cmp(&s2.len())
-            } else {
-                s1.cmp(s2)
-            }
-        });
-
-        Ok(keys_str)
+    let mut keys_str = Vec::with_capacity(len);
+    for i in 0..len {
+        let item = unsafe { keys.get_item_unchecked(i) };
+        let key = match item.cast::<PyString>() {
+            Ok(k) => k.to_owned(),
+            Err(_) => return Err(anyhow!("Map keys must be strings")),
+        };
+        let backed_str = match PyBackedStr::try_from(key) {
+            Ok(bs) => bs,
+            Err(_) => return Err(anyhow!("Failed to convert PyString to PyBackedStr")),
+        };
+        keys_str.push((backed_str, i));
     }
+
+    if keys_str.len() < 2 {
+        return Ok(keys_str);
+    }
+
+    keys_str.sort_by(|a, b| {
+        // sort_unstable_by performs bad
+        let (s1, _) = a;
+        let (s2, _) = b;
+
+        // sorted length-first by the byte representation of the string keys
+        if s1.len() != s2.len() {
+            s1.len().cmp(&s2.len())
+        } else {
+            s1.cmp(s2)
+        }
+    });
+
+    Ok(keys_str)
 }
 
 fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
@@ -356,9 +354,8 @@ where
         types::Array::bounded(len, w)?;
 
         for i in 0..len {
-            unsafe {
-                encode_dag_cbor_from_pyobject(_py, &l.get_item_unchecked(i), w)?;
-            }
+            let item = unsafe { l.get_item_unchecked(i) };
+            encode_dag_cbor_from_pyobject(_py, &item, w)?;
         }
 
         Ok(())
@@ -373,9 +370,8 @@ where
             key.get(..)
                 .expect("whole range is a valid string")
                 .encode(w)?;
-            unsafe {
-                encode_dag_cbor_from_pyobject(_py, &values.get_item_unchecked(i), w)?;
-            }
+            let value = unsafe { values.get_item_unchecked(i) };
+            encode_dag_cbor_from_pyobject(_py, &value, w)?;
         }
 
         Ok(())
