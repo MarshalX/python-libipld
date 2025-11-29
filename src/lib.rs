@@ -110,7 +110,7 @@ fn sort_map_keys(keys: &Bound<PyList>, len: usize) -> Result<Vec<(PyBackedStr, u
     // Returns key and index.
     let mut keys_str = Vec::with_capacity(len);
     for i in 0..len {
-        let item = keys.get_item(i)?;
+        let item = unsafe { keys.get_item_unchecked(i) };
         let key = match item.cast::<PyString>() {
             Ok(k) => k.to_owned(),
             Err(_) => return Err(anyhow!("Map keys must be strings")),
@@ -359,7 +359,8 @@ where
         types::Array::bounded(len, w)?;
 
         for i in 0..len {
-            encode_dag_cbor_from_pyobject(_py, &l.get_item(i)?, w)?;
+            let item = unsafe { l.get_item_unchecked(i) };
+            encode_dag_cbor_from_pyobject(_py, &item, w)?;
         }
 
         Ok(())
@@ -374,7 +375,8 @@ where
             key.get(..)
                 .expect("whole range is a valid string")
                 .encode(w)?;
-            encode_dag_cbor_from_pyobject(_py, &values.get_item(i)?, w)?;
+            let value = unsafe { values.get_item_unchecked(i) };
+            encode_dag_cbor_from_pyobject(_py, &value, w)?;
         }
 
         Ok(())
