@@ -225,9 +225,9 @@ where
         }
         major::MAP => {
             let len = types::Map::len(r)?.expect("contains length");
-            let mut prev_key: Option<&[u8]> = None;
+            let dict = PyDict::new(py);
 
-            let mut items: Vec<(Py<PyAny>, Py<PyAny>)> = Vec::with_capacity(len);
+            let mut prev_key: Option<&[u8]> = None;
             for _ in 0..len {
                 // DAG-CBOR keys are always strings. Python does the UTF-8 validation when creating
                 // the string.
@@ -246,17 +246,9 @@ where
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
-
-                items.push((key_py.unbind().into(), value_py));
+                dict.set_item(key_py, value_py)?;
             }
 
-            let seq = PyList::empty(py);
-            for (key, value) in items {
-                let pair = PyTuple::new(py, &[key, value])?;
-                seq.append(pair)?;
-            }
-
-            let dict = PyDict::from_sequence(&seq)?;
             dict.into_pyobject(py)?.into()
         }
         major::TAG => {
