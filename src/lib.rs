@@ -201,8 +201,9 @@ where
             .into()
         }
         major::ARRAY => {
-            let len: ffi::Py_ssize_t =
-                types::Array::len(r)?.expect("contains length").try_into()?;
+            let len: ffi::Py_ssize_t = types::Array::len(r)?
+                .ok_or_else(|| anyhow!("Array must contain length"))?
+                .try_into()?;
 
             unsafe {
                 let ptr = ffi::PyList_New(len);
@@ -220,7 +221,7 @@ where
             }
         }
         major::MAP => {
-            let len = types::Map::len(r)?.expect("contains length");
+            let len = types::Map::len(r)?.ok_or_else(|| anyhow!("Map must contain length"))?;
             let dict = PyDict::new(py);
 
             let mut prev_key: Option<&[u8]> = None;
@@ -368,7 +369,7 @@ where
 
         for (key, i) in keys {
             key.get(..)
-                .expect("whole range is a valid string")
+                .ok_or_else(|| anyhow!("Invalid string range while encoding map key"))?
                 .encode(w)?;
             let value = unsafe { values.get_item_unchecked(i) };
             encode_dag_cbor_from_pyobject(_py, &value, w)?;
@@ -542,12 +543,7 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
     let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
     if let Ok(py_object) = py_object {
         // check for any remaining data in the reader
-        if reader
-            .fill(1)
-            .expect("SliceReader never fails")
-            .as_ref()
-            .is_empty()
-        {
+        if reader.fill(1)?.as_ref().is_empty() {
             Ok(py_object)
         } else {
             Err(get_err(
