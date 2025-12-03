@@ -40,4 +40,12 @@ jobs:
 
       - name: Run DASL Python harness.
         working-directory: dasl-testing
-        run: uv run --with cbor2 python harnesses/python/main.py libipld
+        run: |
+          RESULT_JSON=$(uv run --with cbor2 python harnesses/python/main.py libipld)
+          {
+            echo "## DASL Results"
+            echo
+            echo '```json'
+            echo "$RESULT_JSON"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
