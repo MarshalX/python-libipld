@@ -7,6 +7,7 @@ permissions:
 
 env:
   UV_PYTHON: 3.8 # minimum supported version
+  DASL_TESTING_REF: "56f7fd74a8eb0955670dab139034e845329dca57"
 
 jobs:
   unit_tests:
@@ -29,3 +30,14 @@ jobs:
 
       - name: Run Tests.
         run: uv run pytest
+
+      - name: Checkout dasl-testing.
+        uses: actions/checkout@v4
+        with:
+            repository: hyphacoop/dasl-testing
+            path: dasl-testing
+            ref: ${{ env.DASL_TESTING_REF }}
+
+      - name: Run DASL Python harness.
+        working-directory: dasl-testing
+        run: uv run python harnesses/python/main.py libipld
