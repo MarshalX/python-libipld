@@ -44,10 +44,27 @@ jobs:
           UV_PYTHON: "3.13"  # DASL testing requires Python 3.13+
         run: |
           RESULT_JSON=$(uv run --with cbor2 python main.py libipld)
+
           {
             echo "## DASL Results"
             echo
-            echo '```json'
-            echo "$RESULT_JSON"
-            echo '```'
+            echo "Metadata:"
+            echo
+            echo "- Link: $(echo "$RESULT_JSON" | jq -r '.metadata.link')"
+            echo "- Version: $(echo "$RESULT_JSON" | jq -r '.metadata.version')"
+            echo
+            echo "### Per-file summary"
+            echo
+            echo "| File | Total | Passed | Failed |"
+            echo "|------|-------|--------|--------|"
+            echo "$RESULT_JSON" | jq -r '
+              .files
+              | to_entries[]
+              | .key as $file
+              | ( [ .value[] | .pass ] ) as $passes
+              | ($passes | length) as $total
+              | ($passes | map(select(. == true)) | length) as $passed
+              | ($total - $passed) as $failed
+              | "| \($file) | \($total) | \($passed) | \($failed) |"
+            '
           } >> "$GITHUB_STEP_SUMMARY"
