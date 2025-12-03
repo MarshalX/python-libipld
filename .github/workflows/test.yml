@@ -40,4 +40,4 @@ jobs:
 
       - name: Run DASL Python harness.
         working-directory: dasl-testing
-        run: uv run python harnesses/python/main.py libipld
+        run: uv run --with cbor2 python harnesses/python/main.py libipld
