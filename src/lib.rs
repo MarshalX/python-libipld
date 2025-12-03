@@ -64,29 +64,24 @@ impl<'de> dec::Read<'de> for SliceReader<'de> {
     }
 }
 
-fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
+fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> PyResult<Bound<'py, PyDict>> {
     let hash = cid.hash();
     let dict_obj = PyDict::new(py);
 
-    dict_obj.set_item("code", hash.code()).unwrap();
-    dict_obj.set_item("size", hash.size()).unwrap();
-    dict_obj
-        .set_item("digest", PyBytes::new(py, hash.digest()))
-        .unwrap();
+    dict_obj.set_item("code", hash.code())?;
+    dict_obj.set_item("size", hash.size())?;
+    dict_obj.set_item("digest", PyBytes::new(py, hash.digest()))?;
 
-    dict_obj
+    Ok(dict_obj)
 }
 
-fn cid_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> Bound<'py, PyDict> {
+fn cid_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> PyResult<Bound<'py, PyDict>> {
     let dict_obj = PyDict::new(py);
 
-    dict_obj.set_item("version", cid.version() as u64).unwrap();
-    dict_obj.set_item("codec", cid.codec()).unwrap();
-    dict_obj
-        .set_item("hash", cid_hash_to_pydict(py, cid))
-        .unwrap();
-
-    dict_obj
+    dict_obj.set_item("version", cid.version() as u64)?;
+    dict_obj.set_item("codec", cid.codec())?;
+    dict_obj.set_item("hash", cid_hash_to_pydict(py, cid)?)?;
+    Ok(dict_obj)
 }
 
 fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
@@ -256,8 +251,10 @@ where
 
             let cid = <types::Bytes<&[u8]>>::decode(r)?.0;
 
-            // Parse the CID for validation. They have a zero byte at the front, strip it off.
-            if Cid::try_from(&cid[1..]).is_err() {
+            if cid.len() <= 1 {
+                return Err(anyhow!("CID is empty or too short"));
+            } else if Cid::try_from(&cid[1..]).is_err() {
+                // Parse the CID for validation. They have a zero byte at the front, strip it off.
                 return Err(anyhow!("Invalid CID"));
             }
 
@@ -434,11 +431,23 @@ where
             peek_one(r).map_err(|_| anyhow!("Unexpected EOF while reading ULEB128 number."))?;
         r.advance(1);
 
-        if (byte & 0x80) == 0 {
-            result |= (byte as u64) << shift;
+        if shift == 63 && byte != 0x00 && byte != 0x01 {
+            // consume remaining continuation bytes so reader stays in sync
+            let mut b = byte;
+            while b & 0x80 != 0 {
+                b = peek_one(r).map_err(|_| {
+                    anyhow!("Unexpected EOF while skipping overflowing ULEB128 number.")
+                })?;
+                r.advance(1);
+            }
+            return Err(anyhow!("ULEB128 overflow"));
+        }
+
+        let low_bits = (byte & !0x80) as u64;
+        result |= low_bits << shift;
+
+        if byte & 0x80 == 0 {
             return Ok(result);
-        } else {
-            result |= (byte as u64 & 0x7F) << shift;
         }
 
         shift += 7;
@@ -603,7 +612,7 @@ fn get_cid_from_py_any(data: &Bound<PyAny>) -> PyResult<Cid> {
 
 #[pyfunction]
 fn decode_cid<'py>(py: Python<'py>, data: &Bound<PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    Ok(cid_to_pydict(py, &get_cid_from_py_any(data)?))
+    cid_to_pydict(py, &get_cid_from_py_any(data)?)
 }
 
 #[pyfunction]
