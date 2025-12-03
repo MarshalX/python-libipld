@@ -39,9 +39,9 @@ jobs:
             ref: ${{ env.DASL_TESTING_REF }}
 
       - name: Run DASL Python harness.
-        working-directory: dasl-testing
+        working-directory: dasl-testing/harnesses/python
         run: |
-          RESULT_JSON=$(uv run --with cbor2 python harnesses/python/main.py libipld)
+          RESULT_JSON=$(uv run --with cbor2 python main.py libipld)
           {
             echo "## DASL Results"
             echo
