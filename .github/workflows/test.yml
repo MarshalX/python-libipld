@@ -38,12 +38,23 @@ jobs:
             path: dasl-testing
             ref: ${{ env.DASL_TESTING_REF }}
 
+      - name: Build libipld wheel.
+        run: uv build --wheel
+        env:
+          UV_PYTHON: "3.13"  # DASL testing requires Python 3.13+
+
       - name: Run DASL Python harness.
         working-directory: dasl-testing/harnesses/python
         env:
           UV_PYTHON: "3.13"  # DASL testing requires Python 3.13+
         run: |
-          RESULT_JSON=$(uv run --with cbor2 python main.py libipld)
+          LIBIPLD_WHEEL=$(ls ../../../dist/libipld-*.whl)
+          RESULT_JSON=$(
+            uv run \
+              --with cbor2 \
+              --with "$LIBIPLD_WHEEL" \
+              python main.py libipld
+          )
 
           {
             echo "## DASL Results"
