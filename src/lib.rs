@@ -266,14 +266,16 @@ where
             // we expect CIDs to have a leading zero byte
             if cid.len() <= 1 || cid[0] != 0 {
                 return Err(anyhow!("Invalid CID"));
-            } 
-        
+            }
+
             let cid_without_prefix = &cid[1..];
             if Cid::try_from(cid_without_prefix).is_err() {
                 return Err(anyhow!("Invalid CID"));
             }
 
-            PyBytes::new(py, cid_without_prefix).into_pyobject(py)?.into()
+            PyBytes::new(py, cid_without_prefix)
+                .into_pyobject(py)?
+                .into()
         }
         major::SIMPLE => match byte {
             // FIXME(MarshalX): should be more clear for bool?
