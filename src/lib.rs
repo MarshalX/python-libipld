@@ -64,6 +64,18 @@ impl<'de> dec::Read<'de> for SliceReader<'de> {
     }
 }
 
+struct PrefixedCidBytes<'a>(&'a [u8]);
+
+impl<'a> Encode for PrefixedCidBytes<'a> {
+    fn encode<W: enc::Write>(&self, w: &mut W) -> Result<(), enc::Error<W::Error>> {
+        // length prefix for bytes: 1 (leading 0) + payload
+        types::Bytes::bounded(1 + self.0.len(), w)?;
+        w.push(&[0x00])?;
+        w.push(self.0)?;
+        Ok(())
+    }
+}
+
 fn cid_hash_to_pydict<'py>(py: Python<'py>, cid: &Cid) -> PyResult<Bound<'py, PyDict>> {
     let hash = cid.hash();
     let dict_obj = PyDict::new(py);
@@ -251,14 +263,17 @@ where
 
             let cid = <types::Bytes<&[u8]>>::decode(r)?.0;
 
-            if cid.len() <= 1 {
-                return Err(anyhow!("CID is empty or too short"));
-            } else if Cid::try_from(&cid[1..]).is_err() {
-                // Parse the CID for validation. They have a zero byte at the front, strip it off.
+            // we expect CIDs to have a leading zero byte
+            if cid.len() <= 1 || cid[0] != 0 {
+                return Err(anyhow!("Invalid CID"));
+            } 
+        
+            let cid_without_prefix = &cid[1..];
+            if Cid::try_from(cid_without_prefix).is_err() {
                 return Err(anyhow!("Invalid CID"));
             }
 
-            PyBytes::new(py, cid).into_pyobject(py)?.into()
+            PyBytes::new(py, cid_without_prefix).into_pyobject(py)?.into()
         }
         major::SIMPLE => match byte {
             // FIXME(MarshalX): should be more clear for bool?
@@ -384,11 +399,13 @@ where
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
         // FIXME (MarshalX): it's not efficient to try to parse it as CID
-        let cid = Cid::try_from(b.as_bytes());
+        let bytes = b.as_bytes();
+        let cid = Cid::try_from(bytes);
         if cid.is_ok() {
-            types::Tag(42, b.as_bytes()).encode(w)?;
+            // by providing custom encoding we avoid extra allocation
+            types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
         } else {
-            types::Bytes(b.as_bytes()).encode(w)?;
+            types::Bytes(bytes).encode(w)?;
         }
 
         Ok(())

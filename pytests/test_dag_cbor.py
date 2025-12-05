@@ -267,3 +267,13 @@ def test_encode_tag_negative_bignum() -> None:
          libipld.encode_dag_cbor(bignum)
 
     assert 'number out of range' in str(exc_info.value).lower()
+
+
+def test_roundtrip_valid_cid_with_short_tag() -> None:
+    encoded_hex = 'd82a582500015512205891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03'
+    encoded_bytes = bytes.fromhex(encoded_hex)
+
+    decoded = libipld.decode_dag_cbor(encoded_bytes)
+    encoded = libipld.encode_dag_cbor(decoded)
+
+    assert encoded == encoded_bytes
