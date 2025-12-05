@@ -40,6 +40,8 @@ jobs:
 
       - name: Build libipld wheel.
         run: uv build --wheel
+        env:
+          UV_PYTHON: "3.13"  # DASL testing requires Python 3.13+
 
       - name: Run DASL Python harness.
         working-directory: dasl-testing/harnesses/python
