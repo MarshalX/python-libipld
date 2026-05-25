@@ -168,6 +168,42 @@ fn collect_and_sort_map_entries<'py>(
     Ok(entries)
 }
 
+// `PyUnicode_DecodeUTF8` runs a state machine even on pure-ASCII input. Skip
+// it by allocating a compact-ASCII `PyUnicode` and memcpying into its inline
+// buffer; non-ASCII falls through to the standard decoder.
+#[cfg(CPython)]
+#[inline]
+fn pystring_from_bytes_fast<'py>(
+    py: Python<'py>,
+    bytes: &[u8],
+) -> PyResult<Bound<'py, PyString>> {
+    if !bytes.is_ascii() {
+        return PyString::from_bytes(py, bytes);
+    }
+
+    unsafe {
+        let obj = ffi::PyUnicode_New(bytes.len() as ffi::Py_ssize_t, 127);
+        if obj.is_null() {
+            return Err(PyErr::fetch(py));
+        }
+
+        let data = obj.cast::<ffi::PyASCIIObject>().offset(1).cast::<u8>();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len());
+        *data.add(bytes.len()) = 0;
+
+        Ok(Bound::from_owned_ptr(py, obj).cast_into_unchecked::<PyString>())
+    }
+}
+
+#[cfg(not(CPython))]
+#[inline]
+fn pystring_from_bytes_fast<'py>(
+    py: Python<'py>,
+    bytes: &[u8],
+) -> PyResult<Bound<'py, PyString>> {
+    PyString::from_bytes(py, bytes)
+}
+
 fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
     if let Ok(b) = obj.cast::<PyBytes>() {
         Ok(b.as_bytes())
@@ -222,8 +258,9 @@ where
             .into_pyobject(py)?
             .into(),
         major::STRING => {
-            // The UTF-8 validation is done when it's converted into a Python string
-            PyString::from_bytes(
+            // ASCII fast path inside the helper; non-ASCII falls through to
+            // `PyUnicode_DecodeUTF8`, which is where the spec validation lives.
+            pystring_from_bytes_fast(
                 py,
                 <types::UncheckedStr<&[u8]>>::decode(r)
                     .map_err(|_| anyhow!("Cannot decode as bytes"))?
@@ -277,7 +314,7 @@ where
                     }
                 }
 
-                let key_py = PyString::from_bytes(py, key)?;
+                let key_py = pystring_from_bytes_fast(py, key)?;
                 prev_key = Some(key);
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
