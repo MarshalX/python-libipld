@@ -7,6 +7,7 @@ permissions:
 
 env:
   RUSTFLAGS: "-Dwarnings"  # treat warnings as errors
+  RUST_VERSION: "1.95.0"
 
 jobs:
   lint:
@@ -15,6 +16,12 @@ jobs:
     steps:
       - name: Checkout repository.
         uses: actions/checkout@v6
+
+      - name: Install rust.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy, rustfmt
 
       - name: Run Clippy.
         run: cargo clippy --all-targets --all-features
