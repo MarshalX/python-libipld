@@ -361,7 +361,7 @@ fn looks_like_cid(bytes: &[u8]) -> bool {
 }
 
 fn encode_dag_cbor_from_pyobject<'py, W: enc::Write>(
-    py: Python<'py>,
+    _py: Python<'py>,
     obj: &Bound<'py, PyAny>,
     w: &mut W,
 ) -> Result<()>
@@ -384,7 +384,7 @@ where
             types::Map::bounded(entries.len(), w)?;
             for (key, value) in &entries {
                 (&**key).encode(w)?;
-                encode_dag_cbor_from_pyobject(py, value, w)?;
+                encode_dag_cbor_from_pyobject(_py, value, w)?;
             }
             return Ok(());
         }
@@ -394,7 +394,7 @@ where
             types::Array::bounded(len, w)?;
             for i in 0..len {
                 let item = l.get_item_unchecked(i);
-                encode_dag_cbor_from_pyobject(py, &item, w)?;
+                encode_dag_cbor_from_pyobject(_py, &item, w)?;
             }
             return Ok(());
         }
@@ -442,7 +442,7 @@ where
         types::Array::bounded(len, w)?;
         for i in 0..len {
             let item = unsafe { l.get_item_unchecked(i) };
-            encode_dag_cbor_from_pyobject(py, &item, w)?;
+            encode_dag_cbor_from_pyobject(_py, &item, w)?;
         }
         Ok(())
     } else if let Ok(map) = obj.cast::<PyDict>() {
@@ -450,7 +450,7 @@ where
         types::Map::bounded(entries.len(), w)?;
         for (key, value) in &entries {
             (&**key).encode(w)?;
-            encode_dag_cbor_from_pyobject(py, value, w)?;
+            encode_dag_cbor_from_pyobject(_py, value, w)?;
         }
         Ok(())
     } else if let Ok(s) = obj.cast::<PyString>() {
