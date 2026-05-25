@@ -19,13 +19,13 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5 # required for correct CodSpeed integration
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6 # required for correct CodSpeed integration
         with:
           python-version: ${{ env.UV_PYTHON }}
 
       - name: Install UV.
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 

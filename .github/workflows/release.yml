@@ -42,7 +42,7 @@ jobs:
             interpreter: pypy3.11
           - os: macos
             target: aarch64
-            # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
+            # actions/setup-python@v6 does not support 3.8 and 3.9 on arm64
             interpreter: 3.8 3.9 pypy3.11
 
           - os: ubuntu
@@ -75,8 +75,8 @@ jobs:
 
     runs-on: ${{ matrix.os }}-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           architecture: ${{ matrix.python-architecture || 'x64' }}
@@ -101,7 +101,7 @@ jobs:
         run: ${{ (runner.os == 'Windows' && 'dir') || 'ls -lh' }} dist/
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pypi_wheels_${{ matrix.os }}_${{ matrix.target }}_${{ matrix.interpreter || 'all' }}_${{ matrix.manylinux }}
           path: dist
@@ -114,7 +114,7 @@ jobs:
         os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
         interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
         exclude:
-          # actions/setup-python@v5 does not support 3.8 and 3.9 on arm64
+          # actions/setup-python@v6 does not support 3.8 and 3.9 on arm64
           - os: macos-14
             interpreter: '3.8'
           - os: macos-14
@@ -129,14 +129,14 @@ jobs:
           git config --global core.eol lf
 
       - name: Checkout repository.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5 # required for macos-13 with Python 3.8-3.10... otherwise UV uses PyPy...
+      - uses: actions/setup-python@v6 # required for macos-13 with Python 3.8-3.10... otherwise UV uses PyPy...
         with:
           python-version: ${{ matrix.interpreter }}
 
       - name: Install UV.
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: ${{ matrix.interpreter }}
 
@@ -188,7 +188,7 @@ jobs:
         run: ${{ (runner.os == 'Windows' && 'dir') || 'ls -lh' }} dist/
 
       - name: Upload wheels.
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pypi_pgo_wheels_${{ matrix.os }}_${{ matrix.interpreter }}
           path: dist
@@ -196,14 +196,14 @@ jobs:
   build-sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build sdist.
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
       - name: Upload sdist.
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pypi_sdist
           path: dist
@@ -213,13 +213,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
       - name: Get dist artifacts.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: pypi_*
           merge-multiple: true
@@ -242,7 +242,7 @@ jobs:
     if: "startsWith(github.ref, 'refs/tags/')"
     needs: [ build, build-pgo, build-sdist, check ]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: pypi_*
           merge-multiple: true
