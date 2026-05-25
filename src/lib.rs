@@ -258,6 +258,10 @@ mod key_cache {
         }
 
         let slot_idx = fx_hash(bytes) & (CAP - 1);
+        // `&raw mut` is the supported path to a `static mut`; the explicit
+        // re-borrow keeps the field accesses readable. Clippy's `deref_addrof`
+        // suggestion would re-introduce `static_mut_refs`.
+        #[allow(clippy::deref_addrof)]
         let slot = &mut *(&raw mut SLOTS[slot_idx]);
 
         if slot.len as usize == bytes.len()
@@ -431,8 +435,7 @@ where
                 prev_key = Some(key);
 
                 let (key_ptr, key_hash) = unsafe { key_cache::intern_key(py, key)? };
-                let key_bound: Bound<'_, PyAny> =
-                    unsafe { Bound::from_owned_ptr(py, key_ptr) };
+                let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
 
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
 
