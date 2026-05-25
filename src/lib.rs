@@ -179,10 +179,7 @@ fn collect_and_sort_map_entries<'py>(
 // buffer; non-ASCII falls through to the standard decoder.
 #[cfg(CPython)]
 #[inline]
-fn pystring_from_bytes_fast<'py>(
-    py: Python<'py>,
-    bytes: &[u8],
-) -> PyResult<Bound<'py, PyString>> {
+fn pystring_from_bytes_fast<'py>(py: Python<'py>, bytes: &[u8]) -> PyResult<Bound<'py, PyString>> {
     if !bytes.is_ascii() {
         return PyString::from_bytes(py, bytes);
     }
@@ -203,10 +200,7 @@ fn pystring_from_bytes_fast<'py>(
 
 #[cfg(not(CPython))]
 #[inline]
-fn pystring_from_bytes_fast<'py>(
-    py: Python<'py>,
-    bytes: &[u8],
-) -> PyResult<Bound<'py, PyString>> {
+fn pystring_from_bytes_fast<'py>(py: Python<'py>, bytes: &[u8]) -> PyResult<Bound<'py, PyString>> {
     PyString::from_bytes(py, bytes)
 }
 
