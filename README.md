@@ -56,6 +56,28 @@ You can install or upgrade `libipld` via
 pip install -U libipld
 ```
 
+### Performance
+
+Benchmarks against [`cbrrr`](https://github.com/DavidBuchanan314/dag-cbrrr) (C) and [`dag_cbor`](https://github.com/hashberg-io/dag-cbor) (pure Python), measured on the four classic [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark) fixtures (round-tripped through DAG-CBOR). Bars are operations/second relative to pure-Python `dag_cbor`; higher is better.
+
+Measured on Apple M1, macOS 15 (Darwin 24.6.0), CPython 3.14.0, `libipld` installed from PyPI (PGO + LTO wheel).
+
+#### Deserialization
+
+![deserialization](https://raw.githubusercontent.com/MarshalX/python-libipld/main/benchmark/deserialization.png)
+
+#### Serialization
+
+![serialization](https://raw.githubusercontent.com/MarshalX/python-libipld/main/benchmark/serialization.png)
+
+Reproduce locally:
+
+```bash
+cd benchmark && ./run.sh
+```
+
+See [`benchmark/README.md`](./benchmark/README.md) for details.
+
 ### Contributing
 
 Contributions of all sizes are welcome.
