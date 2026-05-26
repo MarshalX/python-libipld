@@ -15,7 +15,7 @@ import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 
 BASELINE = 'dag_cbor'
-HUE_ORDER = ['libipld', 'cbrrr', 'dag_cbor']
+HUE_ORDER = ['libipld', 'cbrrr', 'py-ipld-dag', 'dag_cbor']
 
 
 def load(path):

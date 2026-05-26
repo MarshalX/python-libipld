@@ -16,6 +16,11 @@ try:
 except ImportError:
     dag_cbor = None
 
+try:
+    from dag.codecs import dag_cbor as py_ipld_dag_cbor
+except ImportError:
+    py_ipld_dag_cbor = None
+
 
 FIXTURES = ['canada', 'citm_catalog', 'github', 'twitter']
 DATA_DIR = Path(__file__).parent.parent / 'data'
@@ -31,6 +36,10 @@ if dag_cbor is not None:
     DECODERS['dag_cbor'] = dag_cbor.decode
     ENCODERS['dag_cbor'] = dag_cbor.encode
     VERSIONS['dag_cbor'] = version('dag-cbor')
+if py_ipld_dag_cbor is not None:
+    DECODERS['py-ipld-dag'] = py_ipld_dag_cbor.decode
+    ENCODERS['py-ipld-dag'] = py_ipld_dag_cbor.encode
+    VERSIONS['py-ipld-dag'] = version('py-ipld-dag')
 
 
 @pytest.fixture(scope='session', params=FIXTURES)

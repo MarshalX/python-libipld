@@ -5,6 +5,7 @@ DAG-CBOR encode/decode benchmark across Python implementations.
 Compared:
 - [`libipld`](https://github.com/MarshalX/python-libipld) (Rust)
 - [`cbrrr`](https://github.com/DavidBuchanan314/dag-cbrrr) (C)
+- [`py-ipld-dag`](https://github.com/ipld/py-ipld-dag) (Python wrapper over [`cbor2`](https://github.com/agronholm/cbor2) with `canonical=True`; cbor2 itself is Rust)
 - [`dag_cbor`](https://github.com/hashberg-io/dag-cbor) (pure Python, used as the 1× baseline)
 
 Fixtures: `canada.json`, `citm_catalog.json`, `github.json`, `twitter.json` (loaded from `../data/`, parsed once, then encoded to DAG-CBOR via `libipld` for the decode benchmarks).
