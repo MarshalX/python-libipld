@@ -652,11 +652,49 @@ where
     }
 }
 
+// CPython 3.12+ PyLongObject layout: `PyObject_HEAD; uintptr_t lv_tag; digit ob_digit[]`.
+// `lv_tag` packs the sign in the low 3 bits (0=positive, 1=zero, 2=negative) and the
+// digit count in the upper bits. Default builds use 30-bit digits (uint32_t).
+#[cfg(all(CPython, Py_3_12))]
+#[inline]
+unsafe fn pylong_to_dag_int_fast(obj: *mut ffi::PyObject) -> Option<(u64, bool)> {
+    const NON_SIZE_BITS: u32 = 3;
+    const SIGN_MASK: usize = 3;
+    const SIGN_NEGATIVE: usize = 2;
+    const PYLONG_DIGIT_BITS: u32 = 30;
+
+    let lv_tag_ptr = (obj as *const u8).add(std::mem::size_of::<ffi::PyObject>()) as *const usize;
+    let lv_tag = *lv_tag_ptr;
+    let ndigits = lv_tag >> NON_SIZE_BITS;
+    let neg = (lv_tag & SIGN_MASK) == SIGN_NEGATIVE;
+
+    let ob_digit = lv_tag_ptr.add(1) as *const u32;
+    let abs_val: u64 = match ndigits {
+        0 => return Some((0, false)),
+        1 => *ob_digit as u64,
+        2 => (*ob_digit as u64) | ((*ob_digit.add(1) as u64) << PYLONG_DIGIT_BITS),
+        _ => return None,
+    };
+    Some((abs_val, neg))
+}
+
 #[inline]
 fn encode_int<W: enc::Write>(obj: &Bound<'_, PyAny>, w: &mut W) -> Result<()>
 where
     W::Error: Send + Sync,
 {
+    #[cfg(all(CPython, Py_3_12))]
+    {
+        if let Some((abs_val, neg)) = unsafe { pylong_to_dag_int_fast(obj.as_ptr()) } {
+            if neg {
+                types::Negative(abs_val - 1).encode(w)?;
+            } else {
+                abs_val.encode(w)?;
+            }
+            return Ok(());
+        }
+    }
+
     let i: i128 = obj.extract()?;
     if i.is_negative() {
         if -(i + 1) > u64::MAX as i128 {
