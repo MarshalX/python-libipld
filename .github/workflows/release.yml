@@ -37,9 +37,7 @@ jobs:
             target: aarch64
             interpreter: 3.11 3.12 3.13 3.14
 
-          - os: macos
-            target: x86_64
-            interpreter: pypy3.11
+          # macos x86_64 has no entry: base combo cross-compiles from arm64 with the default interpreter list (non-PGO).
           - os: macos
             target: aarch64
             # actions/setup-python@v6 does not support 3.8 and 3.9 on arm64
@@ -111,7 +109,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
+        os: [ ubuntu-latest, windows-latest, macos-14 ]
         interpreter: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
         exclude:
           # actions/setup-python@v6 does not support 3.8 and 3.9 on arm64
@@ -131,7 +129,7 @@ jobs:
       - name: Checkout repository.
         uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6 # required for macos-13 with Python 3.8-3.10... otherwise UV uses PyPy...
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.interpreter }}
 
