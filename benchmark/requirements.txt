@@ -1,0 +1,14 @@
+# benchmarks run against the published PGO build by default.
+# to bench a local PGO wheel, replace the line below with:
+#   libipld @ file:///abs/path/to/libipld-*.whl
+libipld
+
+cbrrr>=1.0
+dag-cbor>=0.3
+
+pytest>=8.0
+pytest-benchmark>=4.0
+pytest-random-order>=1.1
+matplotlib>=3.8
+seaborn>=0.13
+pandas>=2.2
