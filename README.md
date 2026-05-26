@@ -58,7 +58,7 @@ pip install -U libipld
 
 ### Performance
 
-Benchmarks against [`cbrrr`](https://github.com/DavidBuchanan314/dag-cbrrr) (C) and [`dag_cbor`](https://github.com/hashberg-io/dag-cbor) (pure Python), measured on the four classic [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark) fixtures (round-tripped through DAG-CBOR). Bars are operations/second relative to pure-Python `dag_cbor`; higher is better.
+Benchmarks against [`cbrrr`](https://github.com/DavidBuchanan314/dag-cbrrr) (C), [`py-ipld-dag`](https://github.com/ipld/py-ipld-dag) (Python wrapper over Rust-backed [`cbor2`](https://github.com/agronholm/cbor2)) and [`dag_cbor`](https://github.com/hashberg-io/dag-cbor) (pure Python), measured on the four classic [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark) fixtures (round-tripped through DAG-CBOR). Bars are operations/second relative to pure-Python `dag_cbor`; higher is better.
 
 Measured on Apple M1, macOS 15 (Darwin 24.6.0), CPython 3.14.0, `libipld` installed from PyPI (PGO + LTO wheel).
 
@@ -80,8 +80,8 @@ See [`benchmark/README.md`](./benchmark/README.md) for details.
 
 ### Contributing
 
-Contributions of all sizes are welcome.
+Contributions of all sizes are welcome. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for setup, build, test, and benchmarking workflow.
 
 ### License
 
-MIT
+MIT – see [LICENSE](./LICENSE).
