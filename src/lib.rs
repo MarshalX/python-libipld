@@ -10,10 +10,16 @@ use cid::{multibase, Cid};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::{ffi, prelude::*, types::*, BoundObject, Python};
 
-// Private CPython symbol; not provided by pyo3-ffi and CPython-only.
+// Private CPython symbols; not provided by pyo3-ffi and CPython-only.
 #[cfg(CPython)]
 extern "C" {
     fn _PyDict_NewPresized(minused: ffi::Py_ssize_t) -> *mut ffi::PyObject;
+    fn _PyDict_SetItem_KnownHash(
+        op: *mut ffi::PyObject,
+        key: *mut ffi::PyObject,
+        value: *mut ffi::PyObject,
+        hash: ffi::Py_hash_t,
+    ) -> std::os::raw::c_int;
 }
 
 // Empty CPython dicts already have 8 slots, so presizing below that buys
@@ -198,6 +204,124 @@ fn pystring_from_bytes_fast<'py>(py: Python<'py>, bytes: &[u8]) -> PyResult<Boun
     PyString::from_bytes(py, bytes)
 }
 
+// Direct-mapped intern cache for short map keys. atproto-shape payloads
+// reuse a small vocabulary (`$type`, `did`, `cid`, `uri`, `text`, ...) per
+// record; caching the constructed `PyUnicode` + its `Py_hash_t` skips both
+// the rebuild and the rehash inside `PyDict_SetItem`
+#[cfg(all(CPython, not(Py_GIL_DISABLED)))]
+mod key_cache {
+    use super::pystring_from_bytes_fast;
+    use pyo3::{ffi, prelude::*};
+
+    const CAP: usize = 2048;
+    const MAX_KEY_LEN: usize = 64;
+
+    struct Entry {
+        len: u16,
+        bytes: [u8; MAX_KEY_LEN],
+        obj: *mut ffi::PyObject,
+        hash: ffi::Py_hash_t,
+    }
+
+    impl Entry {
+        const fn empty() -> Self {
+            Self {
+                len: 0,
+                bytes: [0; MAX_KEY_LEN],
+                obj: std::ptr::null_mut(),
+                hash: 0,
+            }
+        }
+    }
+
+    static mut SLOTS: [Entry; CAP] = [const { Entry::empty() }; CAP];
+
+    #[inline]
+    fn fx_hash(bytes: &[u8]) -> usize {
+        const K: u64 = 0x517c_c1b7_2722_0a95;
+        let mut h: u64 = 0;
+        for &b in bytes {
+            h = (h.rotate_left(5) ^ b as u64).wrapping_mul(K);
+        }
+        h as usize
+    }
+
+    /// Returns `(strong-ref PyUnicode*, Py_hash_t)`. Caller owns one ref.
+    /// Caller must hold the GIL (we are always called from a `Python<'_>`).
+    #[inline]
+    pub(super) unsafe fn intern_key(
+        py: Python<'_>,
+        bytes: &[u8],
+    ) -> PyResult<(*mut ffi::PyObject, ffi::Py_hash_t)> {
+        if bytes.len() > MAX_KEY_LEN {
+            return build(py, bytes);
+        }
+
+        let slot_idx = fx_hash(bytes) & (CAP - 1);
+        // `&raw mut` is the supported path to a `static mut`; the explicit
+        // re-borrow keeps the field accesses readable. Clippy's `deref_addrof`
+        // suggestion would re-introduce `static_mut_refs`.
+        #[allow(clippy::deref_addrof)]
+        let slot = &mut *(&raw mut SLOTS[slot_idx]);
+
+        if slot.len as usize == bytes.len()
+            && !slot.obj.is_null()
+            && slot.bytes[..bytes.len()] == *bytes
+        {
+            ffi::Py_INCREF(slot.obj);
+            return Ok((slot.obj, slot.hash));
+        }
+
+        let (obj, hash) = build(py, bytes)?;
+        // Evict the previous occupant before claiming the slot.
+        if !slot.obj.is_null() {
+            ffi::Py_DECREF(slot.obj);
+        }
+        // One ref for the cache, one for the caller.
+        ffi::Py_INCREF(obj);
+        slot.obj = obj;
+        slot.hash = hash;
+        slot.len = bytes.len() as u16;
+        slot.bytes[..bytes.len()].copy_from_slice(bytes);
+        Ok((obj, hash))
+    }
+
+    #[inline]
+    unsafe fn build(
+        py: Python<'_>,
+        bytes: &[u8],
+    ) -> PyResult<(*mut ffi::PyObject, ffi::Py_hash_t)> {
+        let s = pystring_from_bytes_fast(py, bytes)?;
+        let ptr = s.as_ptr();
+        let hash = ffi::PyObject_Hash(ptr);
+        if hash == -1 {
+            return Err(PyErr::fetch(py));
+        }
+        Ok((s.into_ptr(), hash))
+    }
+}
+
+// Non-CPython / free-threaded fallback: no cache, just build the string and compute its hash inline
+#[cfg(not(all(CPython, not(Py_GIL_DISABLED))))]
+mod key_cache {
+    use super::pystring_from_bytes_fast;
+    use pyo3::{ffi, prelude::*};
+
+    #[inline]
+    pub(super) unsafe fn intern_key(
+        py: Python<'_>,
+        bytes: &[u8],
+    ) -> PyResult<(*mut ffi::PyObject, ffi::Py_hash_t)> {
+        let s = pystring_from_bytes_fast(py, bytes)?;
+        let ptr = s.as_ptr();
+        let hash = ffi::PyObject_Hash(ptr);
+        if hash == -1 {
+            return Err(PyErr::fetch(py));
+        }
+        Ok((s.into_ptr(), hash))
+    }
+}
+
 fn get_bytes_from_py_any<'py>(obj: &'py Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
     if let Ok(b) = obj.cast::<PyBytes>() {
         Ok(b.as_bytes())
@@ -308,11 +432,32 @@ where
                     }
                 }
 
-                let key_py = pystring_from_bytes_fast(py, key)?;
                 prev_key = Some(key);
 
+                let (key_ptr, key_hash) = unsafe { key_cache::intern_key(py, key)? };
+                let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
+
                 let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
-                dict.set_item(key_py, value_py)?;
+
+                #[cfg(CPython)]
+                unsafe {
+                    let value_ptr = value_py.into_ptr();
+                    let rc = _PyDict_SetItem_KnownHash(
+                        dict.as_ptr(),
+                        key_bound.as_ptr(),
+                        value_ptr,
+                        key_hash,
+                    );
+                    ffi::Py_DECREF(value_ptr);
+                    if rc != 0 {
+                        return Err(anyhow!(PyErr::fetch(py)));
+                    }
+                }
+                #[cfg(not(CPython))]
+                {
+                    let _ = key_hash;
+                    dict.set_item(&key_bound, value_py)?;
+                }
             }
 
             dict.into_pyobject(py)?.into()
