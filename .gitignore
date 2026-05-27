@@ -33,6 +33,7 @@ test.py
 __pycache__
 .benchmarks
 .pytest_cache
+.codspeed
 
 # Build artifacts
 *.so
