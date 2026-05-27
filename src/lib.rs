@@ -349,23 +349,31 @@ where
         .ok_or_else(|| anyhow!("end of data"))
 }
 
+// Snapshot `sys.getrecursionlimit()` once per top-level decode call and pass
+// it through. Calling `ffi::Py_GetRecursionLimit()` from the hot path costs
+// ~5–10 ns per recursive step, which dominates on scalar-dense payloads
+// (canada makes 111k+ recursive calls, one per float).
+#[inline]
+fn current_recursion_limit() -> usize {
+    unsafe { ffi::Py_GetRecursionLimit() as usize }
+}
+
 fn decode_dag_cbor_to_pyobject<'de, R: dec::Read<'de>>(
     py: Python,
     r: &mut R,
     depth: usize,
+    max_depth: usize,
 ) -> Result<Py<PyAny>>
 where
     R::Error: Send + Sync,
 {
-    unsafe {
-        if depth > ffi::Py_GetRecursionLimit() as usize {
-            PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
-                "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
-            )
-            .restore(py);
+    if depth > max_depth {
+        PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
+            "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
+        )
+        .restore(py);
 
-            return Err(anyhow!("Maximum recursion depth exceeded"));
-        }
+        return Err(anyhow!("Maximum recursion depth exceeded"));
     }
 
     let byte = peek_one(r)?;
@@ -398,7 +406,7 @@ where
                     ffi::PyList_SET_ITEM(
                         ptr,
                         i,
-                        decode_dag_cbor_to_pyobject(py, r, depth + 1)?.into_ptr(),
+                        decode_dag_cbor_to_pyobject(py, r, depth + 1, max_depth)?.into_ptr(),
                     );
                 }
 
@@ -437,7 +445,7 @@ where
                 let (key_ptr, key_hash) = unsafe { key_cache::intern_key(py, key)? };
                 let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
 
-                let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1)?;
+                let value_py = decode_dag_cbor_to_pyobject(py, r, depth + 1, max_depth)?;
 
                 #[cfg(CPython)]
                 unsafe {
@@ -714,9 +722,10 @@ where
 fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
     let mut reader = SliceReader::new(data);
     let decoded_parts = PyList::empty(py);
+    let max_depth = current_recursion_limit();
 
     loop {
-        let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
+        let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0, max_depth);
         if let Ok(py_object) = py_object {
             decoded_parts.append(py_object)?;
         } else {
@@ -766,6 +775,7 @@ where
 #[pyfunction]
 pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bound<'py, PyDict>)> {
     let buf = &mut SliceReader::new(data);
+    let max_depth = current_recursion_limit();
 
     if read_u64_leb128(buf).is_err() {
         return Err(get_err(
@@ -773,7 +783,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             "Invalid uvarint".to_string(),
         ));
     }
-    let Ok(header_obj) = decode_dag_cbor_to_pyobject(py, buf, 0) else {
+    let Ok(header_obj) = decode_dag_cbor_to_pyobject(py, buf, 0, max_depth) else {
         return Err(get_err(
             "Failed to read CAR header",
             "Invalid DAG-CBOR".to_string(),
@@ -841,7 +851,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
         buf.advance(consumed);
         let cid_raw = &cid_bytes_before[..consumed];
 
-        let block_result = decode_dag_cbor_to_pyobject(py, buf, 0);
+        let block_result = decode_dag_cbor_to_pyobject(py, buf, 0, max_depth);
         let Ok(block) = block_result else {
             return Err(get_err(
                 "Failed to read CAR block",
@@ -859,7 +869,8 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
 #[pyfunction]
 pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
     let mut reader = SliceReader::new(data);
-    let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0);
+    let max_depth = current_recursion_limit();
+    let py_object = decode_dag_cbor_to_pyobject(py, &mut reader, 0, max_depth);
     if let Ok(py_object) = py_object {
         // check for any remaining data in the reader
         if reader.fill(1)?.as_ref().is_empty() {
