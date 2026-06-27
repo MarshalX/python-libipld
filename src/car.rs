@@ -71,7 +71,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
         // `&[u8]` is itself an `io::Read`, so we hand it to `Cid::read_bytes`
         // directly and recover the consumed length from the slice shrink.
         let mut slice: &[u8] = cid_bytes_before;
-        let cid_result = ::cid::Cid::read_bytes(&mut slice);
+        let cid_result = ::ipld_core::cid::Cid::read_bytes(&mut slice);
         let Ok(cid) = cid_result else {
             return Err(value_error(
                 "Failed to read CID of block",
