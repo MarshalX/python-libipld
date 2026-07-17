@@ -5,6 +5,7 @@ use cbor4ii::core::{
 };
 use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
+use crate::cid::parse_cid_prefix;
 use crate::error::value_error;
 use crate::ffi::dict::new_presized;
 use crate::ffi::key_cache::intern;
@@ -143,7 +144,7 @@ where
             }
 
             let cid_without_prefix = &cid[1..];
-            if ::cid::Cid::try_from(cid_without_prefix).is_err() {
+            if parse_cid_prefix(cid_without_prefix).is_none() {
                 return Err(anyhow!("Invalid CID"));
             }
 

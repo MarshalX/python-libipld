@@ -6,7 +6,7 @@ use cbor4ii::core::{
 use pyo3::pybacked::PyBackedStr;
 use pyo3::{ffi, prelude::*, types::*};
 
-use crate::cid::looks_like_cid;
+use crate::cid::{looks_like_cid, parse_cid_prefix};
 use crate::error::value_error;
 use crate::io::VecWriter;
 
@@ -133,7 +133,7 @@ where
         if tp == &raw mut ffi::PyBytes_Type {
             let b = obj.cast_unchecked::<PyBytes>();
             let bytes = b.as_bytes();
-            if looks_like_cid(bytes) && ::cid::Cid::try_from(bytes).is_ok() {
+            if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
                 // by providing custom encoding we avoid extra allocation
                 types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
             } else {
@@ -187,7 +187,7 @@ where
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
         let bytes = b.as_bytes();
-        if looks_like_cid(bytes) && ::cid::Cid::try_from(bytes).is_ok() {
+        if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
             types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
         } else {
             types::Bytes(bytes).encode(w)?;

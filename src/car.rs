@@ -5,6 +5,7 @@ use cbor4ii::core::dec::Read;
 use pyo3::prelude::*;
 use pyo3::types::*;
 
+use crate::cid::parse_cid_prefix;
 use crate::dag_cbor::de::to_pyobject;
 use crate::error::value_error;
 use crate::ffi::recursion::current_recursion_limit;
@@ -68,25 +69,20 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
         }
 
         let cid_bytes_before = buf.buf;
-        // `&[u8]` is itself an `io::Read`, so we hand it to `Cid::read_bytes`
-        // directly and recover the consumed length from the slice shrink.
-        let mut slice: &[u8] = cid_bytes_before;
-        let cid_result = ::cid::Cid::read_bytes(&mut slice);
-        let Ok(cid) = cid_result else {
+        let Some((consumed, codec)) = parse_cid_prefix(cid_bytes_before) else {
             return Err(value_error(
                 "Failed to read CID of block",
-                cid_result.unwrap_err().to_string(),
+                "Invalid CID".to_string(),
             ));
         };
 
-        if cid.codec() != 0x71 {
+        if codec != 0x71 {
             return Err(value_error(
                 "Failed to read CAR block",
                 "Unsupported codec. For now we support only DAG-CBOR (0x71)".to_string(),
             ));
         }
 
-        let consumed = cid_bytes_before.len() - slice.len();
         buf.advance(consumed);
         let cid_raw = &cid_bytes_before[..consumed];
 
