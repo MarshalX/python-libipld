@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use cbor4ii::core::{
-    dec::{self, Decode, Read},
-    major, marker, types,
+    dec::{self, Read},
+    major, marker,
 };
 use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
@@ -28,6 +28,55 @@ fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
     }
 }
 
+// Argument of the already-peeked header byte: low bits 0..=0x17 are the value
+// itself; 0x18..=0x1b mean 1/2/4/8 following big-endian bytes. Consumes the
+// header. Rejects indefinite-length and reserved arguments (0x1c..=0x1f),
+// which DAG-CBOR forbids.
+#[inline]
+fn decode_arg<'de, R: dec::Read<'de>>(r: &mut R, byte: u8) -> Result<u64>
+where
+    R::Error: Send + Sync,
+{
+    r.advance(1);
+    let low = byte & 0x1f;
+    if low <= 0x17 {
+        return Ok(low as u64);
+    }
+    let n = match low {
+        0x18 => 1,
+        0x19 => 2,
+        0x1a => 4,
+        0x1b => 8,
+        _ => return Err(anyhow!("Indefinite or reserved header argument")),
+    };
+    let buf = r.fill(n)?;
+    let s = buf.as_ref();
+    if s.len() < n {
+        return Err(anyhow!("end of data"));
+    }
+    let mut be = [0u8; 8];
+    be[8 - n..].copy_from_slice(&s[..n]);
+    r.advance(n);
+    Ok(u64::from_be_bytes(be))
+}
+
+// Definite-length bytes/string payload, zero-copy from the input.
+#[inline]
+fn decode_seg<'de, R: dec::Read<'de>>(r: &mut R, byte: u8) -> Result<&'de [u8]>
+where
+    R::Error: Send + Sync,
+{
+    let len = usize::try_from(decode_arg(r, byte)?)?;
+    match r.fill(len)? {
+        dec::Reference::Long(s) if s.len() >= len => {
+            let s = &s[..len];
+            r.advance(len);
+            Ok(s)
+        }
+        _ => Err(anyhow!("end of data")),
+    }
+}
+
 pub(crate) fn to_pyobject<'de, R: dec::Read<'de>>(
     py: Python,
     r: &mut R,
@@ -48,24 +97,27 @@ where
 
     let byte = peek_one(r)?;
     Ok(match dec::if_major(byte) {
-        major::UNSIGNED => u64::decode(r)?.into_pyobject(py)?.into(),
-        major::NEGATIVE => i128::decode(r)?.into_pyobject(py)?.into(),
-        major::BYTES => PyBytes::new(py, <types::Bytes<&[u8]>>::decode(r)?.0)
+        major::UNSIGNED => decode_arg(r, byte)?.into_pyobject(py)?.into(),
+        major::NEGATIVE => {
+            let v = decode_arg(r, byte)?;
+            // `-1 - v` fits an i64 for v < 2^63; the i128 fallback covers the
+            // rest and costs a `_PyLong_FromByteArray`-style conversion.
+            if v <= i64::MAX as u64 {
+                (-1i64 - v as i64).into_pyobject(py)?.into()
+            } else {
+                (-1i128 - v as i128).into_pyobject(py)?.into()
+            }
+        }
+        major::BYTES => PyBytes::new(py, decode_seg(r, byte)?)
             .into_pyobject(py)?
             .into(),
         major::STRING => {
             // ASCII fast path inside the helper; non-ASCII falls through to
             // `PyUnicode_DecodeUTF8`, which is where the spec validation lives.
-            from_bytes(
-                py,
-                <types::UncheckedStr<&[u8]>>::decode(r)
-                    .map_err(|_| anyhow!("Cannot decode as bytes"))?
-                    .0,
-            )?
-            .into()
+            from_bytes(py, decode_seg(r, byte)?)?.into()
         }
         major::ARRAY => {
-            let len = types::Array::len(r)?.ok_or_else(|| anyhow!("Array must contain length"))?;
+            let len = usize::try_from(decode_arg(r, byte)?)?;
             // Every element costs at least one byte; reject a claimed length
             // beyond the remaining input before allocating for it.
             if r.fill(len)?.as_ref().len() < len {
@@ -94,7 +146,7 @@ where
             }
         }
         major::MAP => {
-            let len = types::Map::len(r)?.ok_or_else(|| anyhow!("Map must contain length"))?;
+            let len = usize::try_from(decode_arg(r, byte)?)?;
             // Every entry costs at least two bytes (key + value); reject a
             // claimed length beyond the remaining input before presizing.
             let need = len.saturating_mul(2);
@@ -114,9 +166,11 @@ where
             for _ in 0..len {
                 // DAG-CBOR keys are always strings. Python does the UTF-8 validation when creating
                 // the string.
-                let key = <types::UncheckedStr<&[u8]>>::decode(r)
-                    .map_err(|_| anyhow!("Map keys must be strings"))?
-                    .0;
+                let key_byte = peek_one(r)?;
+                if dec::if_major(key_byte) != major::STRING {
+                    return Err(anyhow!("Map keys must be strings"));
+                }
+                let key = decode_seg(r, key_byte)?;
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
@@ -146,12 +200,16 @@ where
             dict.into_pyobject(py)?.into()
         }
         major::TAG => {
-            let value = types::Tag::tag(r)?;
+            let value = decode_arg(r, byte)?;
             if value != 42 {
                 return Err(anyhow!("Non-42 tags are not supported"));
             }
 
-            let cid = <types::Bytes<&[u8]>>::decode(r)?.0;
+            let content_byte = peek_one(r)?;
+            if dec::if_major(content_byte) != major::BYTES {
+                return Err(anyhow!("Invalid CID"));
+            }
+            let cid = decode_seg(r, content_byte)?;
 
             // we expect CIDs to have a leading zero byte
             if cid.len() <= 1 || cid[0] != 0 {
@@ -182,7 +240,7 @@ where
                 py.None()
             }
             marker::F32 => {
-                let value = f32::decode(r)?;
+                let value = f32::from_bits(decode_arg(r, byte)? as u32);
                 if !value.is_finite() {
                     return Err(anyhow!(
                         "Number out of range for f32 (NaNs are forbidden)".to_string()
@@ -191,7 +249,7 @@ where
                 value.into_pyobject(py)?.into()
             }
             marker::F64 => {
-                let value = f64::decode(r)?;
+                let value = f64::from_bits(decode_arg(r, byte)?);
                 if !value.is_finite() {
                     return Err(anyhow!(
                         "Number out of range for f64 (NaNs are forbidden)".to_string()
