@@ -64,12 +64,22 @@ where
             .into()
         }
         major::ARRAY => {
-            let len: ffi::Py_ssize_t = types::Array::len(r)?
-                .ok_or_else(|| anyhow!("Array must contain length"))?
-                .try_into()?;
+            let len = types::Array::len(r)?.ok_or_else(|| anyhow!("Array must contain length"))?;
+            // Every element costs at least one byte; reject a claimed length
+            // beyond the remaining input before allocating for it.
+            if r.fill(len)?.as_ref().len() < len {
+                return Err(anyhow!("Array length exceeds remaining data"));
+            }
+            let len: ffi::Py_ssize_t = len.try_into()?;
 
             unsafe {
                 let ptr = ffi::PyList_New(len);
+                if ptr.is_null() {
+                    return Err(anyhow!(PyErr::fetch(py)));
+                }
+                // Owned before filling so an error mid-fill releases the list;
+                // list dealloc tolerates the remaining NULL slots.
+                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).cast_into_unchecked();
 
                 for i in 0..len {
                     ffi::PyList_SET_ITEM(
@@ -79,12 +89,17 @@ where
                     );
                 }
 
-                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).cast_into_unchecked();
                 list.into_pyobject(py)?.into()
             }
         }
         major::MAP => {
             let len = types::Map::len(r)?.ok_or_else(|| anyhow!("Map must contain length"))?;
+            // Every entry costs at least two bytes (key + value); reject a
+            // claimed length beyond the remaining input before presizing.
+            let need = len.saturating_mul(2);
+            if r.fill(need)?.as_ref().len() < need {
+                return Err(anyhow!("Map length exceeds remaining data"));
+            }
             // Length is known up front; presize to avoid rehashes as we fill.
             let dict = unsafe {
                 let ptr = new_presized(len);
@@ -189,18 +204,28 @@ where
     })
 }
 
+// Wrap a decode failure; an error already set on the interpreter (e.g. the
+// RecursionError `restore`d above) wins, with the decode error as its cause.
+fn decode_error(py: Python, e: anyhow::Error) -> PyErr {
+    let err = value_error("Failed to decode DAG-CBOR", e.to_string());
+    if let Some(py_err) = PyErr::take(py) {
+        py_err.set_cause(py, Option::from(err));
+        py_err
+    } else {
+        err
+    }
+}
+
 #[pyfunction]
 pub fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
     let mut reader = SliceReader::new(data);
     let decoded_parts = PyList::empty(py);
     let max_depth = current_recursion_limit();
 
-    loop {
-        let py_object = to_pyobject(py, &mut reader, 0, max_depth);
-        if let Ok(py_object) = py_object {
-            decoded_parts.append(py_object)?;
-        } else {
-            break;
+    while !reader.fill(1)?.as_ref().is_empty() {
+        match to_pyobject(py, &mut reader, 0, max_depth) {
+            Ok(py_object) => decoded_parts.append(py_object)?,
+            Err(e) => return Err(decode_error(py, e)),
         }
     }
 
@@ -211,31 +236,18 @@ pub fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Boun
 pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
     let mut reader = SliceReader::new(data);
     let max_depth = current_recursion_limit();
-    let py_object = to_pyobject(py, &mut reader, 0, max_depth);
-    if let Ok(py_object) = py_object {
-        // check for any remaining data in the reader
-        if reader.fill(1)?.as_ref().is_empty() {
-            Ok(py_object)
-        } else {
-            Err(value_error(
-                "Failed to decode DAG-CBOR",
-                "Invalid DAG-CBOR: contains multiple objects (CBOR sequence)".to_string(),
-            ))
+    match to_pyobject(py, &mut reader, 0, max_depth) {
+        Ok(py_object) => {
+            // check for any remaining data in the reader
+            if reader.fill(1)?.as_ref().is_empty() {
+                Ok(py_object)
+            } else {
+                Err(value_error(
+                    "Failed to decode DAG-CBOR",
+                    "Invalid DAG-CBOR: contains multiple objects (CBOR sequence)".to_string(),
+                ))
+            }
         }
-    } else {
-        let err = value_error(
-            "Failed to decode DAG-CBOR",
-            py_object.unwrap_err().to_string(),
-        );
-
-        if let Some(py_err) = PyErr::take(py) {
-            py_err.set_cause(py, Option::from(err));
-            // in case something set global interpreter’s error,
-            // for example C FFI function, we should return it
-            // the real case: RecursionError (set by Py_EnterRecursiveCall)
-            Err(py_err)
-        } else {
-            Err(err)
-        }
+        Err(e) => Err(decode_error(py, e)),
     }
 }

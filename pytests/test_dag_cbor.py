@@ -277,3 +277,25 @@ def test_roundtrip_valid_cid_with_short_tag() -> None:
     encoded = libipld.encode_dag_cbor(decoded)
 
     assert encoded == encoded_bytes
+
+
+def test_dag_cbor_decode_array_length_exceeds_data_error() -> None:
+    # 9b0000000040000000 - array claiming 2**30 elements with no payload
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('9b0000000040000000'))
+
+    assert 'Array length exceeds remaining data' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_map_length_exceeds_data_error() -> None:
+    # bb0000000040000000 - map claiming 2**30 entries with no payload
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('bb0000000040000000'))
+
+    assert 'Map length exceeds remaining data' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_error_mid_array() -> None:
+    # 83010263616263 - [1, 2, "abc"] truncated after the second element's header
+    with pytest.raises(ValueError):
+        libipld.decode_dag_cbor(bytes.fromhex('8301026361'))
