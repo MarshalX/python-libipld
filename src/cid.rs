@@ -27,11 +27,11 @@ pub(crate) fn looks_like_cid(bytes: &[u8]) -> bool {
     bytes.len() == 34 && bytes[0] == 0x12 && bytes[1] == 0x20
 }
 
-pub(crate) fn extract_cid(data: &Bound<PyAny>) -> PyResult<::cid::Cid> {
+    pub(crate) fn extract_cid(data: &Bound<PyAny>) -> PyResult<::ipld_core::cid::Cid> {
     let cid = if let Ok(s) = data.cast::<PyString>() {
-        ::cid::Cid::try_from(s.to_str()?)
+        ::ipld_core::cid::Cid::try_from(s.to_str()?)
     } else {
-        ::cid::Cid::try_from(extract_bytes(data)?)
+        ::ipld_core::cid::Cid::try_from(extract_bytes(data)?)
     };
 
     if let Ok(cid) = cid {

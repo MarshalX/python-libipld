@@ -5,7 +5,7 @@ use crate::error::value_error;
 
 #[pyfunction]
 pub fn decode_multibase<'py>(py: Python<'py>, data: &str) -> PyResult<(char, Bound<'py, PyBytes>)> {
-    let base = ::cid::multibase::decode(data);
+    let base = ::ipld_core::cid::multibase::decode(data);
     if let Ok((base, data)) = base {
         Ok((base.code(), PyBytes::new(py, &data)))
     } else {

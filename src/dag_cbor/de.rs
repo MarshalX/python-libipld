@@ -158,7 +158,7 @@ where
             }
 
             let cid_without_prefix = &cid[1..];
-            if ::cid::Cid::try_from(cid_without_prefix).is_err() {
+            if ::ipld_core::cid::Cid::try_from(cid_without_prefix).is_err() {
                 return Err(anyhow!("Invalid CID"));
             }
 

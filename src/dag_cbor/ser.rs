@@ -133,7 +133,7 @@ where
         if tp == &raw mut ffi::PyBytes_Type {
             let b = obj.cast_unchecked::<PyBytes>();
             let bytes = b.as_bytes();
-            if looks_like_cid(bytes) && ::cid::Cid::try_from(bytes).is_ok() {
+            if looks_like_cid(bytes) && ::ipld_core::cid::Cid::try_from(bytes).is_ok() {
                 // by providing custom encoding we avoid extra allocation
                 types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
             } else {
@@ -187,7 +187,7 @@ where
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
         let bytes = b.as_bytes();
-        if looks_like_cid(bytes) && ::cid::Cid::try_from(bytes).is_ok() {
+        if looks_like_cid(bytes) && ::ipld_core::cid::Cid::try_from(bytes).is_ok() {
             types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
         } else {
             types::Bytes(bytes).encode(w)?;
