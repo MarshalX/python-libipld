@@ -4,8 +4,8 @@
 pub(crate) mod de;
 pub(crate) mod ser;
 
-pub(crate) use de::decode_cid;
-pub(crate) use ser::encode_cid;
+pub use de::decode_cid;
+pub use ser::encode_cid;
 
 use pyo3::prelude::*;
 use pyo3::types::*;

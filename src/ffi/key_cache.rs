@@ -1,7 +1,7 @@
 //! Direct-mapped intern cache for short map keys. atproto-shape payloads
 //! reuse a small vocabulary (`$type`, `did`, `cid`, `uri`, `text`, ...) per
-//! record; caching the constructed `PyUnicode` + its `Py_hash_t` skips both
-//! the rebuild and the rehash inside `PyDict_SetItem`.
+//! record; caching the constructed `PyUnicode`, hash already computed and
+//! stored inside it, skips both the rebuild and the rehash on dict insert.
 
 // Cached variant: CPython with the GIL (single-threaded access to the static).
 #[cfg(all(CPython, not(Py_GIL_DISABLED)))]
@@ -17,7 +17,6 @@ mod cached {
         len: u16,
         bytes: [u8; MAX_KEY_LEN],
         obj: *mut ffi::PyObject,
-        hash: ffi::Py_hash_t,
     }
 
     impl Entry {
@@ -26,7 +25,6 @@ mod cached {
                 len: 0,
                 bytes: [0; MAX_KEY_LEN],
                 obj: std::ptr::null_mut(),
-                hash: 0,
             }
         }
     }
@@ -43,13 +41,10 @@ mod cached {
         h as usize
     }
 
-    /// Returns `(strong-ref PyUnicode*, Py_hash_t)`. Caller owns one ref.
+    /// Returns a strong-ref `PyUnicode*`; the caller owns one ref.
     /// Caller must hold the GIL (we are always called from a `Python<'_>`).
     #[inline]
-    pub(crate) unsafe fn intern(
-        py: Python<'_>,
-        bytes: &[u8],
-    ) -> PyResult<(*mut ffi::PyObject, ffi::Py_hash_t)> {
+    pub(crate) unsafe fn intern(py: Python<'_>, bytes: &[u8]) -> PyResult<*mut ffi::PyObject> {
         if bytes.len() > MAX_KEY_LEN {
             return build(py, bytes);
         }
@@ -66,10 +61,10 @@ mod cached {
             && slot.bytes[..bytes.len()] == *bytes
         {
             ffi::Py_INCREF(slot.obj);
-            return Ok((slot.obj, slot.hash));
+            return Ok(slot.obj);
         }
 
-        let (obj, hash) = build(py, bytes)?;
+        let obj = build(py, bytes)?;
         // Evict the previous occupant before claiming the slot.
         if !slot.obj.is_null() {
             ffi::Py_DECREF(slot.obj);
@@ -77,46 +72,33 @@ mod cached {
         // One ref for the cache, one for the caller.
         ffi::Py_INCREF(obj);
         slot.obj = obj;
-        slot.hash = hash;
         slot.len = bytes.len() as u16;
         slot.bytes[..bytes.len()].copy_from_slice(bytes);
-        Ok((obj, hash))
+        Ok(obj)
     }
 
+    // Hashing up front stores the hash inside the `str`, so every later dict
+    // insert of this key reads it instead of rehashing.
     #[inline]
-    unsafe fn build(
-        py: Python<'_>,
-        bytes: &[u8],
-    ) -> PyResult<(*mut ffi::PyObject, ffi::Py_hash_t)> {
+    unsafe fn build(py: Python<'_>, bytes: &[u8]) -> PyResult<*mut ffi::PyObject> {
         let s = from_bytes(py, bytes)?;
-        let ptr = s.as_ptr();
-        let hash = ffi::PyObject_Hash(ptr);
-        if hash == -1 {
+        if ffi::PyObject_Hash(s.as_ptr()) == -1 {
             return Err(PyErr::fetch(py));
         }
-        Ok((s.into_ptr(), hash))
+        Ok(s.into_ptr())
     }
 }
 
 #[cfg(all(CPython, not(Py_GIL_DISABLED)))]
 pub(crate) use cached::intern;
 
-// Non-CPython / free-threaded fallback: no cache, just build the string and
-// compute its hash inline.
+// Non-CPython / free-threaded fallback: no cache, just build the string.
 #[cfg(not(all(CPython, not(Py_GIL_DISABLED))))]
 pub(crate) unsafe fn intern(
     py: pyo3::Python<'_>,
     bytes: &[u8],
-) -> pyo3::PyResult<(*mut pyo3::ffi::PyObject, pyo3::ffi::Py_hash_t)> {
-    use pyo3::{ffi, prelude::*};
-
+) -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
     use crate::ffi::string::from_bytes;
 
-    let s = from_bytes(py, bytes)?;
-    let ptr = s.as_ptr();
-    let hash = ffi::PyObject_Hash(ptr);
-    if hash == -1 {
-        return Err(PyErr::fetch(py));
-    }
-    Ok((s.into_ptr(), hash))
+    Ok(from_bytes(py, bytes)?.into_ptr())
 }

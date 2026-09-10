@@ -4,5 +4,5 @@
 pub(crate) mod de;
 pub(crate) mod ser;
 
-pub(crate) use de::{decode_dag_cbor, decode_dag_cbor_multi};
-pub(crate) use ser::encode_dag_cbor;
+pub use de::{decode_dag_cbor, decode_dag_cbor_multi};
+pub use ser::encode_dag_cbor;
