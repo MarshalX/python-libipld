@@ -42,22 +42,25 @@ where
     if low <= 0x17 {
         return Ok(low as u64);
     }
-    let n = match low {
-        0x18 => 1,
-        0x19 => 2,
-        0x1a => 4,
-        0x1b => 8,
-        _ => return Err(anyhow!("Indefinite or reserved header argument")),
-    };
-    let buf = r.fill(n)?;
-    let s = buf.as_ref();
-    if s.len() < n {
-        return Err(anyhow!("end of data"));
+    macro_rules! read_be {
+        ($t:ty) => {{
+            const N: usize = std::mem::size_of::<$t>();
+            let buf = r.fill(N)?;
+            let Some(bytes) = buf.as_ref().first_chunk::<N>() else {
+                return Err(anyhow!("end of data"));
+            };
+            let v = <$t>::from_be_bytes(*bytes) as u64;
+            r.advance(N);
+            v
+        }};
     }
-    let mut be = [0u8; 8];
-    be[8 - n..].copy_from_slice(&s[..n]);
-    r.advance(n);
-    Ok(u64::from_be_bytes(be))
+    Ok(match low {
+        0x18 => read_be!(u8),
+        0x19 => read_be!(u16),
+        0x1a => read_be!(u32),
+        0x1b => read_be!(u64),
+        _ => return Err(anyhow!("Indefinite or reserved header argument")),
+    })
 }
 
 // Definite-length bytes/string payload, zero-copy from the input.
