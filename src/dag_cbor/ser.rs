@@ -178,7 +178,7 @@ fn encode_map_entries<'py>(
         // CPython hands out the UTF-8 buffer of a valid `str`.
         unsafe { std::str::from_utf8_unchecked(entry.key()) }.encode(&mut enc.w)?;
         let value = unsafe { Borrowed::from_ptr(py, entry.value) };
-        from_pyobject(py, &value, enc)?;
+        encode_value(py, &value, enc)?;
     }
     Ok(())
 }
@@ -198,10 +198,11 @@ fn encode_map<'py>(py: Python<'py>, map: &Bound<'py, PyDict>, enc: &mut Encoder)
     result
 }
 
-fn from_pyobject<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder) -> Result<()> {
+#[inline(always)]
+fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder) -> Result<()> {
     // Exact-type pointer compare per branch avoids the MRO walk that
     // `is_instance_of` / `cast` perform. Order tuned for typical ATProto
-    // record shapes; subclasses fall through to the slow path below.
+    // record shapes; subclasses fall through to the slow path.
     let tp = unsafe { ffi::Py_TYPE(obj.as_ptr()) };
     unsafe {
         if tp == &raw mut ffi::PyUnicode_Type {
@@ -213,28 +214,13 @@ fn from_pyobject<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encode
             return encode_map(py, obj.cast_unchecked::<PyDict>(), enc);
         }
         if tp == &raw mut ffi::PyList_Type {
-            let l = obj.cast_unchecked::<PyList>();
-            let len = l.len();
-            types::Array::bounded(len, &mut enc.w)?;
-            for i in 0..len {
-                let item = list_item(l, i);
-                from_pyobject(py, &item, enc)?;
-            }
-            return Ok(());
+            return encode_list(py, obj.cast_unchecked::<PyList>(), enc);
         }
         if tp == &raw mut ffi::PyLong_Type {
             return encode_int(obj, &mut enc.w);
         }
         if tp == &raw mut ffi::PyBytes_Type {
-            let b = obj.cast_unchecked::<PyBytes>();
-            let bytes = b.as_bytes();
-            if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
-                // by providing custom encoding we avoid extra allocation
-                types::Tag(42, PrefixedCidBytes(bytes)).encode(&mut enc.w)?;
-            } else {
-                types::Bytes(bytes).encode(&mut enc.w)?;
-            }
-            return Ok(());
+            return encode_bytes(obj.cast_unchecked::<PyBytes>(), &mut enc.w);
         }
         if tp == &raw mut ffi::PyBool_Type {
             (obj.as_ptr() == ffi::Py_True()).encode(&mut enc.w)?;
@@ -245,50 +231,72 @@ fn from_pyobject<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encode
             return Ok(());
         }
         if tp == &raw mut ffi::PyFloat_Type {
-            let f = obj.cast_unchecked::<PyFloat>();
-            let v = f.value();
-            if !v.is_finite() {
-                return Err(anyhow!("Number out of range"));
-            }
-            v.encode(&mut enc.w)?;
-            return Ok(());
+            return encode_float(obj.cast_unchecked::<PyFloat>(), &mut enc.w);
         }
     }
 
-    // Slow path: subclasses of supported types (rare in DAG-CBOR usage).
+    encode_subclass(py, obj, enc)
+}
+
+#[inline(never)]
+fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) -> Result<()> {
+    let len = l.len();
+    types::Array::bounded(len, &mut enc.w)?;
+    for i in 0..len {
+        let item = unsafe { list_item(l, i) };
+        encode_value(py, &item, enc)?;
+    }
+    Ok(())
+}
+
+#[inline]
+fn encode_bytes<W: enc::Write>(b: &Bound<'_, PyBytes>, w: &mut W) -> Result<()>
+where
+    W::Error: Send + Sync,
+{
+    let bytes = b.as_bytes();
+    if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
+        // by providing custom encoding we avoid extra allocation
+        types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
+    } else {
+        types::Bytes(bytes).encode(w)?;
+    }
+    Ok(())
+}
+
+#[inline]
+fn encode_float<W: enc::Write>(f: &Bound<'_, PyFloat>, w: &mut W) -> Result<()>
+where
+    W::Error: Send + Sync,
+{
+    let v = f.value();
+    if !v.is_finite() {
+        return Err(anyhow!("Number out of range"));
+    }
+    v.encode(w)?;
+    Ok(())
+}
+
+// Subclasses of supported types (rare in DAG-CBOR usage).
+#[cold]
+#[inline(never)]
+fn encode_subclass<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder) -> Result<()> {
     if obj.is_instance_of::<PyBool>() {
         (obj.as_ptr() == unsafe { ffi::Py_True() }).encode(&mut enc.w)?;
         Ok(())
     } else if obj.is_instance_of::<PyInt>() {
         encode_int(obj, &mut enc.w)
     } else if let Ok(l) = obj.cast::<PyList>() {
-        let len = l.len();
-        types::Array::bounded(len, &mut enc.w)?;
-        for i in 0..len {
-            let item = unsafe { list_item(l, i) };
-            from_pyobject(py, &item, enc)?;
-        }
-        Ok(())
+        encode_list(py, l, enc)
     } else if let Ok(map) = obj.cast::<PyDict>() {
         encode_map(py, map, enc)
     } else if let Ok(s) = obj.cast::<PyString>() {
         s.to_str()?.encode(&mut enc.w)?;
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
-        let bytes = b.as_bytes();
-        if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
-            types::Tag(42, PrefixedCidBytes(bytes)).encode(&mut enc.w)?;
-        } else {
-            types::Bytes(bytes).encode(&mut enc.w)?;
-        }
-        Ok(())
+        encode_bytes(b, &mut enc.w)
     } else if let Ok(f) = obj.cast::<PyFloat>() {
-        let v = f.value();
-        if !v.is_finite() {
-            return Err(anyhow!("Number out of range"));
-        }
-        v.encode(&mut enc.w)?;
-        Ok(())
+        encode_float(f, &mut enc.w)
     } else {
         Err(anyhow!("Unknown tag"))
     }
@@ -303,7 +311,7 @@ pub fn encode_dag_cbor<'py>(
         w: VecWriter::new(),
         entries: MapEntries::new(),
     };
-    if let Err(e) = from_pyobject(py, data, &mut enc) {
+    if let Err(e) = encode_value(py, data, &mut enc) {
         return Err(value_error("Failed to encode DAG-CBOR", e.to_string()));
     }
     Ok(PyBytes::new(py, enc.w.as_slice()))

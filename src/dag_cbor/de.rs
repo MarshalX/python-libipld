@@ -80,25 +80,17 @@ where
     }
 }
 
-pub(crate) fn to_pyobject<'de, R: dec::Read<'de>>(
+#[inline(always)]
+fn decode_value<'de, R: dec::Read<'de>>(
     py: Python,
     r: &mut R,
+    byte: u8,
     depth: usize,
     max_depth: usize,
 ) -> Result<Py<PyAny>>
 where
     R::Error: Send + Sync,
 {
-    if depth > max_depth {
-        PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
-            "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
-        )
-        .restore(py);
-
-        return Err(anyhow!("Maximum recursion depth exceeded"));
-    }
-
-    let byte = peek_one(r)?;
     Ok(match dec::if_major(byte) {
         major::UNSIGNED => decode_arg(r, byte)?.into_pyobject(py)?.into(),
         major::NEGATIVE => {
@@ -118,89 +110,6 @@ where
             // ASCII fast path inside the helper; non-ASCII falls through to
             // `PyUnicode_DecodeUTF8`, which is where the spec validation lives.
             from_bytes(py, decode_seg(r, byte)?)?.into()
-        }
-        major::ARRAY => {
-            let len = usize::try_from(decode_arg(r, byte)?)?;
-            // Every element costs at least one byte; reject a claimed length
-            // beyond the remaining input before allocating for it.
-            if r.fill(len)?.as_ref().len() < len {
-                return Err(anyhow!("Array length exceeds remaining data"));
-            }
-            let len: ffi::Py_ssize_t = len.try_into()?;
-
-            unsafe {
-                let ptr = ffi::PyList_New(len);
-                if ptr.is_null() {
-                    return Err(anyhow!(PyErr::fetch(py)));
-                }
-                // Owned before filling so an error mid-fill releases the list;
-                // list dealloc tolerates the remaining NULL slots.
-                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).cast_into_unchecked();
-
-                for i in 0..len {
-                    ffi::PyList_SET_ITEM(
-                        ptr,
-                        i,
-                        to_pyobject(py, r, depth + 1, max_depth)?.into_ptr(),
-                    );
-                }
-
-                list.into_pyobject(py)?.into()
-            }
-        }
-        major::MAP => {
-            let len = usize::try_from(decode_arg(r, byte)?)?;
-            // Every entry costs at least two bytes (key + value); reject a
-            // claimed length beyond the remaining input before presizing.
-            let need = len.saturating_mul(2);
-            if r.fill(need)?.as_ref().len() < need {
-                return Err(anyhow!("Map length exceeds remaining data"));
-            }
-            // Length is known up front; presize to avoid rehashes as we fill.
-            let dict = unsafe {
-                let ptr = new_presized(len);
-                if ptr.is_null() {
-                    return Err(anyhow!(PyErr::fetch(py)));
-                }
-                Bound::from_owned_ptr(py, ptr).cast_into_unchecked::<PyDict>()
-            };
-
-            let mut prev_key: Option<&[u8]> = None;
-            for _ in 0..len {
-                // DAG-CBOR keys are always strings. Python does the UTF-8 validation when creating
-                // the string.
-                let key_byte = peek_one(r)?;
-                if dec::if_major(key_byte) != major::STRING {
-                    return Err(anyhow!("Map keys must be strings"));
-                }
-                let key = decode_seg(r, key_byte)?;
-
-                if let Some(prev_key) = prev_key {
-                    // it cares about duplicated keys too thanks to Ordering::Equal
-                    if map_key_cmp(prev_key, key) != std::cmp::Ordering::Less {
-                        return Err(anyhow!("Map keys must be sorted and unique"));
-                    }
-                }
-
-                prev_key = Some(key);
-
-                let (key_ptr, key_hash) = unsafe { intern(py, key)? };
-                let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
-
-                let value_py = to_pyobject(py, r, depth + 1, max_depth)?;
-
-                #[cfg(CPython)]
-                unsafe {
-                    set_item_known_hash(py, &dict, &key_bound, value_py, key_hash)?;
-                }
-                #[cfg(not(CPython))]
-                {
-                    let _ = key_hash;
-                    dict.set_item(&key_bound, value_py)?;
-                }
-            }
-
-            dict.into_pyobject(py)?.into()
         }
         major::TAG => {
             let value = decode_arg(r, byte)?;
@@ -262,8 +171,129 @@ where
             }
             _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
+        _ => return decode_container(py, r, byte, depth, max_depth),
+    })
+}
+
+#[inline(never)]
+fn decode_container<'de, R: dec::Read<'de>>(
+    py: Python,
+    r: &mut R,
+    byte: u8,
+    depth: usize,
+    max_depth: usize,
+) -> Result<Py<PyAny>>
+where
+    R::Error: Send + Sync,
+{
+    if depth > max_depth {
+        PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
+            "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
+        )
+        .restore(py);
+
+        return Err(anyhow!("Maximum recursion depth exceeded"));
+    }
+
+    Ok(match dec::if_major(byte) {
+        major::ARRAY => {
+            let len = usize::try_from(decode_arg(r, byte)?)?;
+            // Every element costs at least one byte; reject a claimed length
+            // beyond the remaining input before allocating for it.
+            if r.fill(len)?.as_ref().len() < len {
+                return Err(anyhow!("Array length exceeds remaining data"));
+            }
+            let len: ffi::Py_ssize_t = len.try_into()?;
+
+            unsafe {
+                let ptr = ffi::PyList_New(len);
+                if ptr.is_null() {
+                    return Err(anyhow!(PyErr::fetch(py)));
+                }
+                // Owned before filling so an error mid-fill releases the list;
+                // list dealloc tolerates the remaining NULL slots.
+                let list: Bound<'_, PyList> = Bound::from_owned_ptr(py, ptr).cast_into_unchecked();
+
+                for i in 0..len {
+                    let item_byte = peek_one(r)?;
+                    ffi::PyList_SET_ITEM(
+                        ptr,
+                        i,
+                        decode_value(py, r, item_byte, depth + 1, max_depth)?.into_ptr(),
+                    );
+                }
+
+                list.into_pyobject(py)?.into()
+            }
+        }
+        major::MAP => {
+            let len = usize::try_from(decode_arg(r, byte)?)?;
+            // Every entry costs at least two bytes (key + value); reject a
+            // claimed length beyond the remaining input before presizing.
+            let need = len.saturating_mul(2);
+            if r.fill(need)?.as_ref().len() < need {
+                return Err(anyhow!("Map length exceeds remaining data"));
+            }
+            // Length is known up front; presize to avoid rehashes as we fill.
+            let dict = unsafe {
+                let ptr = new_presized(len);
+                if ptr.is_null() {
+                    return Err(anyhow!(PyErr::fetch(py)));
+                }
+                Bound::from_owned_ptr(py, ptr).cast_into_unchecked::<PyDict>()
+            };
+
+            let mut prev_key: Option<&[u8]> = None;
+            for _ in 0..len {
+                let key_byte = peek_one(r)?;
+                if dec::if_major(key_byte) != major::STRING {
+                    return Err(anyhow!("Map keys must be strings"));
+                }
+                let key = decode_seg(r, key_byte)?;
+
+                if let Some(prev_key) = prev_key {
+                    // it cares about duplicated keys too thanks to Ordering::Equal
+                    if map_key_cmp(prev_key, key) != std::cmp::Ordering::Less {
+                        return Err(anyhow!("Map keys must be sorted and unique"));
+                    }
+                }
+
+                prev_key = Some(key);
+
+                let (key_ptr, key_hash) = unsafe { intern(py, key)? };
+                let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
+
+                let value_byte = peek_one(r)?;
+                let value_py = decode_value(py, r, value_byte, depth + 1, max_depth)?;
+
+                #[cfg(CPython)]
+                unsafe {
+                    set_item_known_hash(py, &dict, &key_bound, value_py, key_hash)?;
+                }
+                #[cfg(not(CPython))]
+                {
+                    let _ = key_hash;
+                    dict.set_item(&key_bound, value_py)?;
+                }
+            }
+
+            dict.into_pyobject(py)?.into()
+        }
         _ => return Err(anyhow!("Invalid major type".to_string())),
     })
+}
+
+pub(crate) fn to_pyobject<'de, R: dec::Read<'de>>(
+    py: Python,
+    r: &mut R,
+    depth: usize,
+    max_depth: usize,
+) -> Result<Py<PyAny>>
+where
+    R::Error: Send + Sync,
+{
+    let byte = peek_one(r)?;
+    decode_value(py, r, byte, depth, max_depth)
 }
 
 // Wrap a decode failure; an error already set on the interpreter (e.g. the
