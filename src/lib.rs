@@ -9,6 +9,11 @@ mod ffi;
 mod io;
 mod multibase;
 
+pub use car::decode_car;
+pub use cid::{decode_cid, encode_cid};
+pub use dag_cbor::{decode_dag_cbor, decode_dag_cbor_multi, encode_dag_cbor};
+pub use multibase::{decode_multibase, encode_multibase};
+
 #[pymodule]
 #[pyo3(name = "_libipld")]
 fn libipld(m: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -7,14 +7,11 @@ use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
 use crate::cid::parse_cid_prefix;
 use crate::error::value_error;
-use crate::ffi::dict::new_presized;
+use crate::ffi::dict::{new_presized, set_item};
 use crate::ffi::key_cache::intern;
 use crate::ffi::recursion::current_recursion_limit;
 use crate::ffi::string::from_bytes;
 use crate::io::{peek_one, SliceReader};
-
-#[cfg(CPython)]
-use crate::ffi::dict::set_item_known_hash;
 
 fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
     /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
@@ -260,21 +257,13 @@ where
 
                 prev_key = Some(key);
 
-                let (key_ptr, key_hash) = unsafe { intern(py, key)? };
-                let key_bound: Bound<'_, PyAny> = unsafe { Bound::from_owned_ptr(py, key_ptr) };
+                let key_py: Bound<'_, PyAny> =
+                    unsafe { Bound::from_owned_ptr(py, intern(py, key)?) };
 
                 let value_byte = peek_one(r)?;
                 let value_py = decode_value(py, r, value_byte, depth + 1, max_depth)?;
 
-                #[cfg(CPython)]
-                unsafe {
-                    set_item_known_hash(py, &dict, &key_bound, value_py, key_hash)?;
-                }
-                #[cfg(not(CPython))]
-                {
-                    let _ = key_hash;
-                    dict.set_item(&key_bound, value_py)?;
-                }
+                unsafe { set_item(py, &dict, key_py.as_borrowed(), value_py)? };
             }
 
             dict.into_pyobject(py)?.into()

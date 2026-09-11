@@ -3,5 +3,5 @@
 pub(crate) mod de;
 pub(crate) mod ser;
 
-pub(crate) use de::decode_multibase;
-pub(crate) use ser::encode_multibase;
+pub use de::decode_multibase;
+pub use ser::encode_multibase;
