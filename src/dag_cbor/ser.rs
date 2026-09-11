@@ -273,6 +273,8 @@ where
     if !v.is_finite() {
         return Err(anyhow!("Number out of range"));
     }
+    // DAG-CBOR forbids -0.0; it equals 0.0, so encode it as 0.0.
+    let v = if v == 0.0 { 0.0 } else { v };
     v.encode(w)?;
     Ok(())
 }

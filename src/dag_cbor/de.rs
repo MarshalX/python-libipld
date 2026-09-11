@@ -149,20 +149,28 @@ where
                 py.None()
             }
             marker::F32 => {
-                let value = f32::from_bits(decode_arg(r, byte)? as u32);
+                let bits = decode_arg(r, byte)? as u32;
+                let value = f32::from_bits(bits);
                 if !value.is_finite() {
                     return Err(anyhow!(
                         "Number out of range for f32 (NaNs are forbidden)".to_string()
                     ));
                 }
+                if bits == (-0.0f32).to_bits() {
+                    return Err(anyhow!("Negative zero is forbidden for f32".to_string()));
+                }
                 value.into_pyobject(py)?.into()
             }
             marker::F64 => {
-                let value = f64::from_bits(decode_arg(r, byte)?);
+                let bits = decode_arg(r, byte)?;
+                let value = f64::from_bits(bits);
                 if !value.is_finite() {
                     return Err(anyhow!(
                         "Number out of range for f64 (NaNs are forbidden)".to_string()
                     ));
+                }
+                if bits == (-0.0f64).to_bits() {
+                    return Err(anyhow!("Negative zero is forbidden for f64".to_string()));
                 }
                 value.into_pyobject(py)?.into()
             }
