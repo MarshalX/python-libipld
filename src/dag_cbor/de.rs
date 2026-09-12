@@ -6,7 +6,7 @@ use cbor4ii::core::{
 use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
 use crate::cid::parse_cid_prefix;
-use crate::error::value_error;
+use crate::error::{pending_or_value_error, recursion_error, value_error};
 use crate::ffi::dict::{new_presized, set_item};
 use crate::ffi::key_cache::intern;
 use crate::ffi::recursion::current_recursion_limit;
@@ -192,12 +192,10 @@ where
     R::Error: Send + Sync,
 {
     if depth > max_depth {
-        PyErr::new::<pyo3::exceptions::PyRecursionError, _>(
+        return Err(recursion_error(
+            py,
             "RecursionError: maximum recursion depth exceeded in DAG-CBOR decoding",
-        )
-        .restore(py);
-
-        return Err(anyhow!("Maximum recursion depth exceeded"));
+        ));
     }
 
     Ok(match dec::if_major(byte) {
@@ -293,16 +291,8 @@ where
     decode_value(py, r, byte, depth, max_depth)
 }
 
-// Wrap a decode failure; an error already set on the interpreter (e.g. the
-// RecursionError `restore`d above) wins, with the decode error as its cause.
 fn decode_error(py: Python, e: anyhow::Error) -> PyErr {
-    let err = value_error("Failed to decode DAG-CBOR", e.to_string());
-    if let Some(py_err) = PyErr::take(py) {
-        py_err.set_cause(py, Option::from(err));
-        py_err
-    } else {
-        err
-    }
+    pending_or_value_error(py, "Failed to decode DAG-CBOR", e)
 }
 
 #[pyfunction]

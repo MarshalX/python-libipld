@@ -48,7 +48,7 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 
 Every function raises `ValueError` for input it cannot decode or encode. The message starts with the failing operation (for example `Failed to read CAR block.`) followed by the reason.
 
-The decoders (`decode_dag_cbor`, `decode_dag_cbor_multi`, `decode_car`) additionally raise `RecursionError` when the data is nested deeper than `sys.getrecursionlimit()`.
+The DAG-CBOR and CAR functions additionally raise `RecursionError` when the data is nested deeper than `sys.getrecursionlimit()`.
 
 Inputs are validated strictly against the specifications. There is no option to skip validation or accept partially broken data. Data produced by third-party encoders is not always valid, so consumers of untrusted input (for example the AT Protocol firehose) should be prepared to catch `ValueError` per message and skip it.
 
