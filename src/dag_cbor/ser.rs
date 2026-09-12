@@ -9,7 +9,8 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::{ffi, prelude::*, types::*, Borrowed};
 
 use crate::cid::{looks_like_cid, parse_cid_prefix};
-use crate::error::value_error;
+use crate::error::{pending_or_value_error, recursion_error};
+use crate::ffi::recursion::current_recursion_limit;
 use crate::io::VecWriter;
 
 struct PrefixedCidBytes<'a>(&'a [u8]);
@@ -69,6 +70,22 @@ impl Drop for MapEntries {
 struct Encoder {
     w: VecWriter,
     entries: MapEntries,
+    depth: usize,
+    max_depth: usize,
+}
+
+impl Encoder {
+    #[inline]
+    fn enter(&mut self, py: Python<'_>) -> Result<()> {
+        if self.depth > self.max_depth {
+            return Err(recursion_error(
+                py,
+                "RecursionError: maximum recursion depth exceeded in DAG-CBOR encoding",
+            ));
+        }
+        self.depth += 1;
+        Ok(())
+    }
 }
 
 #[cfg(not(Py_GIL_DISABLED))]
@@ -184,8 +201,10 @@ fn encode_map_entries<'py>(
 }
 
 fn encode_map<'py>(py: Python<'py>, map: &Bound<'py, PyDict>, enc: &mut Encoder) -> Result<()> {
+    enc.enter(py)?;
     let base = enc.entries.0.len();
     let result = encode_map_entries(py, map, enc, base);
+    enc.depth -= 1;
     // Always unwind this level's slice of the shared stack, also on error.
     #[cfg(Py_GIL_DISABLED)]
     for entry in &enc.entries.0[base..] {
@@ -240,12 +259,14 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
 
 #[inline(never)]
 fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) -> Result<()> {
+    enc.enter(py)?;
     let len = l.len();
     types::Array::bounded(len, &mut enc.w)?;
     for i in 0..len {
         let item = unsafe { list_item(l, i) };
         encode_value(py, &item, enc)?;
     }
+    enc.depth -= 1;
     Ok(())
 }
 
@@ -312,9 +333,11 @@ pub fn encode_dag_cbor<'py>(
     let mut enc = Encoder {
         w: VecWriter::new(),
         entries: MapEntries::new(),
+        depth: 0,
+        max_depth: current_recursion_limit(),
     };
     if let Err(e) = encode_value(py, data, &mut enc) {
-        return Err(value_error("Failed to encode DAG-CBOR", e.to_string()));
+        return Err(pending_or_value_error(py, "Failed to encode DAG-CBOR", e));
     }
     Ok(PyBytes::new(py, enc.w.as_slice()))
 }

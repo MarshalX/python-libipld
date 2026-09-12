@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 
 import libipld
 import pytest
@@ -139,6 +140,28 @@ def test_recursion_limit_exceed_on_nested_maps() -> None:
         libipld.decode_dag_cbor(dag_cbor)
 
     assert 'in DAG-CBOR decoding' in str(exc_info.value)
+
+
+def _nest(kind: str, depth: int):
+    obj = [] if kind == 'list' else {}
+    for _ in range(depth):
+        obj = [obj] if kind == 'list' else {'a': obj}
+    return obj
+
+
+@pytest.mark.parametrize('kind', ['list', 'dict'])
+def test_recursion_limit_exceed_on_encode(kind) -> None:
+    obj = _nest(kind, sys.getrecursionlimit() + 100)
+    with pytest.raises(RecursionError) as exc_info:
+        libipld.encode_dag_cbor(obj)
+
+    assert 'in DAG-CBOR encoding' in str(exc_info.value)
+
+
+@pytest.mark.parametrize('kind', ['list', 'dict'])
+def test_nested_within_recursion_limit_roundtrip(kind) -> None:
+    obj = _nest(kind, sys.getrecursionlimit() // 2)
+    assert libipld.decode_dag_cbor(libipld.encode_dag_cbor(obj)) == obj
 
 
 def test_dag_cbor_decode_largest_unsigned_int_roundtrip() -> None:
