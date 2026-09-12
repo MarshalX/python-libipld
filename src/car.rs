@@ -30,7 +30,12 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
         ));
     };
 
-    let header = header_obj.cast_bound::<PyDict>(py)?;
+    let Ok(header) = header_obj.cast_bound::<PyDict>(py) else {
+        return Err(value_error(
+            "Failed to read CAR header",
+            "Header must be a map".to_string(),
+        ));
+    };
 
     let Some(version) = header.get_item("version")? else {
         return Err(value_error(
@@ -38,7 +43,8 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             "Version is None".to_string(),
         ));
     };
-    if version.cast::<PyInt>()?.extract::<u64>()? != 1 {
+    // A non-int or out-of-range version is as unsupported as a wrong one.
+    if version.extract::<u64>().ok() != Some(1) {
         return Err(value_error(
             "Failed to read CAR header",
             "Unsupported version. Version must be 1".to_string(),
@@ -51,7 +57,13 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             "Roots is None".to_string(),
         ));
     };
-    if roots.cast::<PyList>()?.len() == 0 {
+    let Ok(roots) = roots.cast::<PyList>() else {
+        return Err(value_error(
+            "Failed to read CAR header",
+            "Roots must be a list".to_string(),
+        ));
+    };
+    if roots.is_empty() {
         return Err(value_error(
             "Failed to read CAR header",
             "Roots is empty. Must be at least one".to_string(),

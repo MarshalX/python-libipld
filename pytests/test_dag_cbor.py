@@ -164,8 +164,19 @@ def test_dag_cbor_decode_invalid_utf8() -> None:
     with pytest.raises(ValueError) as exc_info:
         libipld.decode_dag_cbor(bytes.fromhex('62c328'))
 
-
+    assert str(exc_info.value).startswith('Failed to decode DAG-CBOR. UnicodeDecodeError:')
     assert 'utf-8' in str(exc_info.value)
+
+
+def test_dag_cbor_decode_lone_surrogate() -> None:
+    text = '😍😍😍😍'.encode() + bytes.fromhex('eda0bd')
+    assert len(text) == 19
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes([0x60 | len(text)]) + text)
+
+    msg = str(exc_info.value)
+    assert msg.startswith('Failed to decode DAG-CBOR. UnicodeDecodeError:')
+    assert 'position 16' in msg
 
 
 def test_dab_cbor_decode_map_int_key() -> None:
