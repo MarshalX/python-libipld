@@ -37,12 +37,12 @@ def test_decode_car_invalid_header_len() -> None:
 
 
 def test_decode_car_invalid_header_type() -> None:
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         header_len = bytes.fromhex('33')  # 3
         header_obj = libipld.encode_dag_cbor('strInsteadOfObj')
         libipld.decode_car(header_len + header_obj)
 
-    assert "is not an instance of 'dict'" in str(exc_info.value)
+    assert 'Header must be a map' in str(exc_info.value)
 
 
 def test_decode_car_invalid_header_version_key() -> None:
@@ -63,6 +63,16 @@ def test_decode_car_invalid_header_version_value() -> None:
     assert 'Version must be 1' in str(exc_info.value)
 
 
+@pytest.mark.parametrize('version', ['1', -1, 2**64 - 1])
+def test_decode_car_invalid_header_version_type(version) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        header_len = bytes.fromhex('33')  # 3
+        header_obj = libipld.encode_dag_cbor({'version': version})
+        libipld.decode_car(header_len + header_obj)
+
+    assert 'Version must be 1' in str(exc_info.value)
+
+
 def test_decode_car_invalid_header_roots_key() -> None:
     with pytest.raises(ValueError) as exc_info:
         header_len = bytes.fromhex('33')  # 3
@@ -73,12 +83,12 @@ def test_decode_car_invalid_header_roots_key() -> None:
 
 
 def test_decode_car_invalid_header_roots_value_type() -> None:
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         header_len = bytes.fromhex('33')  # 3
         header_obj = libipld.encode_dag_cbor({'version': 1, 'roots': 123})
         libipld.decode_car(header_len + header_obj)
 
-    assert "is not an instance of 'list'" in str(exc_info.value)
+    assert 'Roots must be a list' in str(exc_info.value)
 
 
 def test_decode_car_invalid_header_roots_value_empty_list() -> None:
@@ -99,3 +109,17 @@ def test_decode_car_invalid_block_cid() -> None:
         libipld.decode_car(header_len + header_obj + block1)
 
     assert 'Failed to read CID of block' in str(exc_info.value)
+
+
+def test_decode_car_invalid_block_utf8() -> None:
+    header_obj = libipld.encode_dag_cbor({'version': 1, 'roots': ['blabla']})
+    header = bytes([len(header_obj)]) + header_obj
+    block_obj = bytes.fromhex('a1617365') + 'ab'.encode() + bytes.fromhex('eda0bd')  # {'s': 'ab\xed\xa0\xbd'}
+    cid = bytes.fromhex('01711220') + bytes(32)
+    block = bytes([len(cid) + len(block_obj)]) + cid + block_obj
+
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_car(header + block)
+
+    assert str(exc_info.value).startswith('Failed to read CAR block. UnicodeDecodeError:')
+    assert 'utf-8' in str(exc_info.value)

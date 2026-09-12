@@ -44,6 +44,27 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 #### 🚗 CAR (Content Addressable Archives) Operations
 - **`decode_car(data: bytes) -> tuple[dict, dict[bytes, dict]]`** - Decode CAR files into header metadata and a mapping of CID bytes to block data
 
+### Error handling
+
+Every function raises `ValueError` for input it cannot decode or encode. The message starts with the failing operation (for example `Failed to read CAR block.`) followed by the reason.
+
+The decoders (`decode_dag_cbor`, `decode_dag_cbor_multi`, `decode_car`) additionally raise `RecursionError` when the data is nested deeper than `sys.getrecursionlimit()`.
+
+Inputs are validated strictly against the specifications. There is no option to skip validation or accept partially broken data. Data produced by third-party encoders is not always valid, so consumers of untrusted input (for example the AT Protocol firehose) should be prepared to catch `ValueError` per message and skip it.
+
+```python
+import libipld
+
+try:
+    header, blocks = libipld.decode_car(data)
+except ValueError as e:
+    print(f'skipping malformed CAR: {e}')
+except RecursionError:
+    print('skipping CAR with excessively nested block')
+```
+
+Passing a value of the wrong type, such as a `str` where `bytes` is expected, raises `TypeError`.
+
 ### Requirements
 
 - Python 3.8 or higher.
