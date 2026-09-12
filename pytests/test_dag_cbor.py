@@ -1,3 +1,4 @@
+import math
 import os
 
 import libipld
@@ -230,6 +231,35 @@ def test_dag_cbor_decode_negative_infinity_f32_error() -> None:
         libipld.decode_dag_cbor(bytes.fromhex('faff800000'))
 
     assert 'number out of range for f32' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_negative_zero_f64_error() -> None:
+    # fb8000000000000000 - IEEE 754 double precision negative zero, forbidden in DAG-CBOR
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fb8000000000000000'))
+
+    assert 'negative zero' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_negative_zero_f32_error() -> None:
+    # fa80000000 - IEEE 754 single precision negative zero, forbidden in DAG-CBOR
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_dag_cbor(bytes.fromhex('fa80000000'))
+
+    assert 'negative zero' in str(exc_info.value).lower()
+
+
+def test_dag_cbor_decode_positive_zero_f64() -> None:
+    decoded = libipld.decode_dag_cbor(bytes.fromhex('fb0000000000000000'))
+
+    assert decoded == 0.0
+    assert math.copysign(1.0, decoded) == 1.0
+
+
+def test_dag_cbor_encode_negative_zero_as_positive_zero() -> None:
+    # -0.0 equals 0.0 and is forbidden in DAG-CBOR, so it is encoded as 0.0
+    assert libipld.encode_dag_cbor(-0.0) == bytes.fromhex('fb0000000000000000')
+    assert libipld.encode_dag_cbor(-0.0) == libipld.encode_dag_cbor(0.0)
 
 
 def test_dag_cbor_decode_cbor_sequence_error() -> None:

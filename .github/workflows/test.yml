@@ -7,7 +7,7 @@ permissions:
 
 env:
   UV_PYTHON: 3.8 # minimum supported version
-  DASL_TESTING_REF: "56f7fd74a8eb0955670dab139034e845329dca57"
+  DASL_TESTING_REF: "b2aacc0b352c64ad101af48d96a9763b03289a12"
 
 jobs:
   unit_tests:
