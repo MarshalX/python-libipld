@@ -101,6 +101,7 @@ def encode_dag_cbor(data: Any) -> bytes:
         ValueError: If the object cannot be represented in DAG-CBOR. This
             includes unsupported types, integers outside the 64-bit range,
             non-finite floats, and map keys that are not strings.
+        RecursionError: If the object is nested deeper than sys.getrecursionlimit().
     """
 
 
