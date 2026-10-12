@@ -29,7 +29,7 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 ### Features
 
 #### 🔗 CID (Content Identifier) Operations
-- **`decode_cid(data: str | bytes) -> dict`** - Decode CIDs from string representation (e.g., `'bafy...'`) or raw bytes into structured data containing version, codec, and hash information
+- **`decode_cid(data: str | bytes) -> dict[str, Any]`** - Decode CIDs from string representation (e.g., `'bafy...'`) or raw bytes into structured data containing version, codec, and hash information
 - **`encode_cid(data: str | bytes) -> str`** - Encode CID raw bytes to string representation, or return string CIDs as-is
 
 #### 📦 DAG-CBOR (Directed Acyclic Graph CBOR) Operations  
@@ -39,10 +39,10 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 
 #### 🌐 Multibase Operations
 - **`decode_multibase(data: str) -> tuple[str, bytes]`** - Decode multibase-encoded strings, returning the base identifier and decoded data
-- **`encode_multibase(code: str, data: str | bytes) -> str`** - Encode data using specified multibase encoding (e.g., base58btc with code `'u'`)
+- **`encode_multibase(code: str, data: str | bytes) -> str`** - Encode data using specified multibase encoding (e.g. `'u'` for base64url)
 
 #### 🚗 CAR (Content Addressable Archives) Operations
-- **`decode_car(data: bytes) -> tuple[dict, dict[bytes, dict]]`** - Decode CAR files into header metadata and a mapping of CID bytes to block data
+- **`decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]]`** - Decode CAR files into header metadata and a mapping of CID bytes to block data
 
 ### Error handling
 
@@ -69,6 +69,8 @@ Passing a value of the wrong type, such as a `str` where `bytes` is expected, ra
 
 - Python 3.8 or higher.
 
+Prebuilt wheels are published for CPython 3.8-3.15, free-threaded CPython 3.14t and 3.15t, and PyPy 3.11.
+
 ### Installing
 
 You can install or upgrade `libipld` via
@@ -81,7 +83,7 @@ pip install -U libipld
 
 Benchmarks against [`cbrrr`](https://github.com/DavidBuchanan314/dag-cbrrr) (C), [`py-ipld-dag`](https://github.com/ipld/py-ipld-dag) (Python wrapper over Rust-backed [`cbor2`](https://github.com/agronholm/cbor2)) and [`dag_cbor`](https://github.com/hashberg-io/dag-cbor) (pure Python), measured on the four classic [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark) fixtures (round-tripped through DAG-CBOR). Bars are operations/second relative to pure-Python `dag_cbor`; higher is better.
 
-Measured on Apple M1, macOS 15 (Darwin 24.6.0), CPython 3.14.0, `libipld` installed from PyPI (PGO + LTO wheel).
+Measured on Apple M1, macOS 27, CPython 3.14.0, `libipld` installed from PyPI (PGO + LTO wheel).
 
 #### Deserialization
 
@@ -98,6 +100,10 @@ cd benchmark && ./run.sh
 ```
 
 See [`benchmark/README.md`](./benchmark/README.md) for details.
+
+### Changelog
+
+See [`CHANGES.md`](./CHANGES.md) for release notes.
 
 ### Contributing
 

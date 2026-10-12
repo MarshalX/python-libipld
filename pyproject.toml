@@ -7,7 +7,7 @@ authors = [
 ]
 license = "MIT"
 readme = "README.md"
-keywords = ["library", "lib", "ipld", "cid", "multibase", "multihash", "dag", "cbor", "dag-cbor"]
+keywords = ["ipld", "cid", "car", "multibase", "multihash", "dag", "cbor", "dag-cbor", "atproto", "bluesky", "rust"]
 requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -38,6 +38,7 @@ classifiers = [
 "Homepage" = "https://github.com/MarshalX/python-libipld"
 "Repository" = "https://github.com/MarshalX/python-libipld"
 "Tracker" = "https://github.com/MarshalX/python-libipld/issues"
+"Changelog" = "https://github.com/MarshalX/python-libipld/blob/main/CHANGES.md"
 "Author" = "https://github.com/MarshalX"
 
 [dependency-groups]

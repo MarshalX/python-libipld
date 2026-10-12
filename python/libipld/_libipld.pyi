@@ -116,7 +116,7 @@ def encode_multibase(code: str, data: str | bytes) -> str:
     """Encode data using multibase.
 
     Args:
-        code: Base code (e.g. 'u' for base58btc)
+        code: Base code (e.g. 'u' for base64url, 'z' for base58btc)
         data: Data to encode (bytes or string that can be converted to bytes)
 
     Returns:
