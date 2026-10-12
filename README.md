@@ -10,7 +10,7 @@ import libipld
 # CID
 print(libipld.decode_cid('bafyreig7jbijxpn4lfhvnvyuwf5u5jyhd7begxwyiqe7ingwxycjdqjjoa'))
 # Output: {'hash': {'size': 32, 'code': 18, 'digest': b'\xdfHP\x9b\xbd\xbcYOV\xd7\x14\xb1{N\xa7\x07\x1f\xc2C^\xd8D\t\xf44\xd6\xbe\x04\x91\xc1)p'}, 'version': 1, 'codec': 113}
-print(libipld.encode_cid(b'\x01q\x12 \xb6\x81\x1a\x1d\x7f\x8c\x17\x91\xdam\x1bO\x13m\xc0\xe2&y\xea\xfe\xaaX\xd6M~/\xaa\xd5\x89\x0e\x9d\x9c'))
+print(libipld.encode_cid(bytes.fromhex('01711220b6811a1d7f8c1791da6d1b4f136dc0e22679eafeaa58d64d7e2faad5890e9d9c')))
 # Output: bafyreifwqenb274mc6i5u3i3j4jw3qhcez46v7vkldle27rpvlkysdu5tq
 
 # DAG-CBOR
