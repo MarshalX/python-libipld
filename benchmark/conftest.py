@@ -2,9 +2,8 @@ import json
 from importlib.metadata import version
 from pathlib import Path
 
-import pytest
-
 import libipld
+import pytest
 
 try:
     import cbrrr

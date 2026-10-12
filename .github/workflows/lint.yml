@@ -28,3 +28,12 @@ jobs:
 
       - name: Run fmt check.
         run: cargo fmt --all -- --check
+
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Run Ruff lint.
+        run: uv run --only-group dev ruff check --output-format github
+
+      - name: Run Ruff format check.
+        run: uv run --only-group dev ruff format --check --output-format github
