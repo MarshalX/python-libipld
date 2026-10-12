@@ -1,6 +1,6 @@
-## Contibuting to python-libipld
+## Contributing to python-libipld
 
-This project is a small, single-file wrapper around Rust crates like `cid`, `cbor4ii`, and `multibase`, exposing a Python API through `PyO3`. Despite its size, performance matters a lot.
+This project is a small wrapper around Rust crates like `cid` (which also provides multibase) and `cbor4ii`, exposing a Python API through `PyO3`. Despite its size, performance matters a lot.
 
 The project uses `uv` package manager. Installing UV: https://docs.astral.sh/uv/getting-started/installation/
 
