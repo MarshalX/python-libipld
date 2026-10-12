@@ -28,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
     "Topic :: Software Development",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Software Development :: Pre-processors",
@@ -51,6 +52,8 @@ testing = [
     'pytest-benchmark==5.3.0; python_version >= "3.10"',
     'pytest-xdist==3.6.1; python_version == "3.8"',
     'pytest-xdist==3.8.0; python_version >= "3.9"',
+    # only used by the free-threaded CI job
+    'pytest-run-parallel==0.10.0; python_version >= "3.14"',
 ]
 codspeed = [
     # only run on CI with the latest Python version
@@ -64,7 +67,8 @@ all = [
 
 [tool.pytest.ini_options]
 markers = [
-    'benchmark_main: marks tests as main benchmarks to run selectively'
+    'benchmark_main: marks tests as main benchmarks to run selectively',
+    'thread_unsafe: test must not run under pytest-run-parallel',
 ]
 addopts = [
     '--benchmark-columns', 'min,mean,stddev,outliers,rounds,iterations',

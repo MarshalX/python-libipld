@@ -99,8 +99,9 @@ unsafe fn list_item<'a, 'py>(l: &'a Bound<'py, PyList>, i: usize) -> Borrowed<'a
 
 #[cfg(Py_GIL_DISABLED)]
 #[inline]
-unsafe fn list_item<'py>(l: &Bound<'py, PyList>, i: usize) -> Bound<'py, PyAny> {
-    l.get_item_unchecked(i)
+fn list_item<'py>(l: &Bound<'py, PyList>, i: usize) -> Result<Bound<'py, PyAny>> {
+    l.get_item(i)
+        .map_err(|_| anyhow!("List changed size during encoding"))
 }
 
 #[inline]
@@ -263,7 +264,10 @@ fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) 
     let len = l.len();
     types::Array::bounded(len, &mut enc.w)?;
     for i in 0..len {
+        #[cfg(not(Py_GIL_DISABLED))]
         let item = unsafe { list_item(l, i) };
+        #[cfg(Py_GIL_DISABLED)]
+        let item = list_item(l, i)?;
         encode_value(py, &item, enc)?;
     }
     enc.depth -= 1;

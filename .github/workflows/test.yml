@@ -79,3 +79,38 @@ jobs:
               | "| \($file) | \($total) | \($passed) | \($failed) |"
             '
           } >> "$GITHUB_STEP_SUMMARY"
+
+  free_threaded_tests:
+    name: Unit tests (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [ '3.14t', '3.15t' ]
+
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+
+    steps:
+      - name: Checkout repository.
+        uses: actions/checkout@v6
+
+      - name: Install UV.
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install dependencies.
+        run: uv sync --group testing
+
+      - name: Compile.
+        run: uv pip install -v -e .
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Check the GIL stays disabled.
+        run: uv run python -c "import sys, libipld; assert not sys._is_gil_enabled()"
+
+      - name: Run Tests.
+        run: uv run pytest
+
+      - name: Run Tests in parallel threads.
+        run: uv run pytest --parallel-threads=4 -o thread_unsafe_fixtures=benchmark
