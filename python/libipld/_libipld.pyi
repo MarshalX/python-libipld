@@ -1,6 +1,4 @@
-from __future__ import annotations
 from typing import Any
-
 
 def decode_cid(data: str | bytes) -> dict[str, Any]:
     """Decode a CID from either its string representation or raw bytes.
@@ -21,7 +19,6 @@ def decode_cid(data: str | bytes) -> dict[str, Any]:
         ValueError: If the input is not a valid CID or is of an unsupported type.
     """
 
-
 def encode_cid(data: str | bytes) -> str:
     """Encode a CID to its string representation.
 
@@ -34,7 +31,6 @@ def encode_cid(data: str | bytes) -> str:
     Raises:
         ValueError: If the input is not a valid CID or is of an unsupported type.
     """
-
 
 def decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]]:
     """Decode a CAR file.
@@ -53,7 +49,6 @@ def decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]
         RecursionError: If a block is nested deeper than sys.getrecursionlimit().
     """
 
-
 def decode_dag_cbor(data: bytes) -> Any:
     """Decode DAG-CBOR data to Python objects.
 
@@ -69,7 +64,6 @@ def decode_dag_cbor(data: bytes) -> Any:
             text strings that are not valid UTF-8.
         RecursionError: If the data is nested deeper than sys.getrecursionlimit().
     """
-
 
 def decode_dag_cbor_multi(data: bytes) -> list[Any]:
     """Decode multiple DAG-CBOR objects from bytes.
@@ -87,7 +81,6 @@ def decode_dag_cbor_multi(data: bytes) -> list[Any]:
         RecursionError: If an object is nested deeper than sys.getrecursionlimit().
     """
 
-
 def encode_dag_cbor(data: Any) -> bytes:
     """Encode Python objects to DAG-CBOR.
 
@@ -104,7 +97,6 @@ def encode_dag_cbor(data: Any) -> bytes:
         RecursionError: If the object is nested deeper than sys.getrecursionlimit().
     """
 
-
 def decode_multibase(data: str) -> tuple[str, bytes]:
     """Decode multibase-encoded data.
 
@@ -119,7 +111,6 @@ def decode_multibase(data: str) -> tuple[str, bytes]:
     Raises:
         ValueError: If the input is not valid multibase.
     """
-
 
 def encode_multibase(code: str, data: str | bytes) -> str:
     """Encode data using multibase.

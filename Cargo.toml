@@ -13,14 +13,13 @@ name = "libipld"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28.3", features = ["generate-import-lib", "anyhow"] }
-python3-dll-a = "0.2.15"
-anyhow = "1.0.102"
+pyo3 = { version = "0.29.3", features = ["anyhow"] }
+anyhow = "1.0.104"
 cid = "0.11.3"
-cbor4ii = { version = "1.2.2" }
+cbor4ii = { version = "1.2.3" }
 
 [build-dependencies]
-pyo3-build-config = "0.28.3"
+pyo3-build-config = "0.29.3"
 
 [workspace]
 members = [ "profiling" ]

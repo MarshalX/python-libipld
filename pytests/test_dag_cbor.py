@@ -1,10 +1,10 @@
 import math
 import os
 import sys
+from pathlib import Path
 
 import libipld
 import pytest
-
 from conftest import load_cbor_data_fixtures, load_json_data_fixtures
 
 _REAL_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
@@ -122,12 +122,12 @@ def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
 
 @pytest.mark.benchmark_main
 def test_dag_cbor_decode_torture_cids(benchmark) -> None:
-    dag_cbor = open(_TORTURE_CIDS_DAG_CBOR_PATH, 'rb').read()
+    dag_cbor = Path(_TORTURE_CIDS_DAG_CBOR_PATH).read_bytes()
     benchmark(libipld.decode_dag_cbor, dag_cbor)
 
 
 def test_recursion_limit_exceed_on_nested_lists() -> None:
-    dag_cbor = open(_TORTURE_NESTED_LISTS_DAG_CBOR_PATH, 'rb').read()
+    dag_cbor = Path(_TORTURE_NESTED_LISTS_DAG_CBOR_PATH).read_bytes()
     with pytest.raises(RecursionError) as exc_info:
         libipld.decode_dag_cbor(dag_cbor)
 
@@ -135,7 +135,7 @@ def test_recursion_limit_exceed_on_nested_lists() -> None:
 
 
 def test_recursion_limit_exceed_on_nested_maps() -> None:
-    dag_cbor = open(_TORTURE_NESTED_MAPS_DAG_CBOR_PATH, 'rb').read()
+    dag_cbor = Path(_TORTURE_NESTED_MAPS_DAG_CBOR_PATH).read_bytes()
     with pytest.raises(RecursionError) as exc_info:
         libipld.decode_dag_cbor(dag_cbor)
 
@@ -319,7 +319,7 @@ def test_encode_tag_positive_bignum() -> None:
     bignum = 18446744073709551616
 
     with pytest.raises(ValueError) as exc_info:
-         libipld.encode_dag_cbor(bignum)
+        libipld.encode_dag_cbor(bignum)
 
     assert 'number out of range' in str(exc_info.value).lower()
 
@@ -328,7 +328,7 @@ def test_encode_tag_negative_bignum() -> None:
     bignum = -18446744073709551617
 
     with pytest.raises(ValueError) as exc_info:
-         libipld.encode_dag_cbor(bignum)
+        libipld.encode_dag_cbor(bignum)
 
     assert 'number out of range' in str(exc_info.value).lower()
 

@@ -12,7 +12,7 @@ permissions:
 
 env:
   UV_FROZEN: true
-  UV_PYTHON: 3.14
+  UV_PYTHON: 3.15
   RUST_VERSION: "1.95.0"
 
 jobs:

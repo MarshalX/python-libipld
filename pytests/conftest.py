@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import json
 import os
 import urllib.request
-from typing import Any, List, Tuple
+from typing import Any
 
 
-def load_json_data_fixtures(dir_path: str) -> List[Tuple[str, Any]]:
+def load_json_data_fixtures(dir_path: str) -> list[tuple[str, Any]]:
     data = []
     for file in os.listdir(dir_path):
         if not file.endswith('.json'):
@@ -16,7 +18,7 @@ def load_json_data_fixtures(dir_path: str) -> List[Tuple[str, Any]]:
     return data
 
 
-def load_cbor_data_fixtures(dir_path: str) -> List[Tuple[str, Any]]:
+def load_cbor_data_fixtures(dir_path: str) -> list[tuple[str, Any]]:
     fixtures = []
     for root, folder, files in os.walk(dir_path):
         fixture = {}

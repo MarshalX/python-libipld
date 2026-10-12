@@ -2,7 +2,6 @@ import os
 
 import libipld
 import pytest
-
 from conftest import load_car_fixture
 
 _DID = os.environ.get('CAR_REPO_DID', 'did:plc:w4es6sfh43zlht3bgrzi5qzq')  # default is public bot in bsky.app
@@ -23,8 +22,8 @@ def test_decode_car(benchmark, car) -> None:
     assert 1 == len(header['roots'])
 
     assert isinstance(blocks, dict)
-    assert all(isinstance(k, bytes) for k in blocks.keys())
-    assert all(len(k) == 36 for k in blocks.keys())
+    assert all(isinstance(k, bytes) for k in blocks)
+    assert all(len(k) == 36 for k in blocks)
     assert all(isinstance(v, dict) for v in blocks.values())
     assert all(v for v in blocks.values())  # not empty dict
 
@@ -114,7 +113,7 @@ def test_decode_car_invalid_block_cid() -> None:
 def test_decode_car_invalid_block_utf8() -> None:
     header_obj = libipld.encode_dag_cbor({'version': 1, 'roots': ['blabla']})
     header = bytes([len(header_obj)]) + header_obj
-    block_obj = bytes.fromhex('a1617365') + 'ab'.encode() + bytes.fromhex('eda0bd')  # {'s': 'ab\xed\xa0\xbd'}
+    block_obj = bytes.fromhex('a1617365') + b'ab' + bytes.fromhex('eda0bd')  # {'s': 'ab\xed\xa0\xbd'}
     cid = bytes.fromhex('01711220') + bytes(32)
     block = bytes([len(cid) + len(block_obj)]) + cid + block_obj
 
