@@ -2,9 +2,10 @@ version = 1
 revision = 5
 requires-python = ">=3.8"
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
     "python_full_version == '3.9.*'",
     "python_full_version < '3.9'",
 ]
@@ -58,9 +59,10 @@ name = "iniconfig"
 version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/01/e1/2069291243c926a2ff1cd706c7f3eeb9b62144bf60f77c9fb9ff2fb26bd3/iniconfig-2.3.1.tar.gz", hash = "sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960", size = 21209, upload-time = "2026-10-06T22:48:38.076Z" }
 wheels = [
@@ -80,6 +82,7 @@ all = [
     { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pytest-benchmark", version = "5.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "pytest-benchmark", version = "5.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "pytest-run-parallel", marker = "python_full_version >= '3.14'" },
     { name = "pytest-xdist", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pytest-xdist", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "ruff" },
@@ -99,6 +102,7 @@ testing = [
     { name = "pytest-benchmark", version = "4.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pytest-benchmark", version = "5.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "pytest-benchmark", version = "5.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "pytest-run-parallel", marker = "python_full_version >= '3.14'" },
     { name = "pytest-xdist", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pytest-xdist", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "ruff" },
@@ -115,6 +119,7 @@ all = [
     { name = "pytest-benchmark", marker = "python_full_version == '3.8.*'", specifier = "==4.0.0" },
     { name = "pytest-benchmark", marker = "python_full_version == '3.9.*'", specifier = "==5.2.3" },
     { name = "pytest-benchmark", marker = "python_full_version >= '3.10'", specifier = "==5.3.0" },
+    { name = "pytest-run-parallel", marker = "python_full_version >= '3.14'", specifier = "==0.10.0" },
     { name = "pytest-xdist", marker = "python_full_version == '3.8.*'", specifier = "==3.6.1" },
     { name = "pytest-xdist", marker = "python_full_version >= '3.9'", specifier = "==3.8.0" },
     { name = "ruff", specifier = ">=0.17.0" },
@@ -132,6 +137,7 @@ testing = [
     { name = "pytest-benchmark", marker = "python_full_version == '3.8.*'", specifier = "==4.0.0" },
     { name = "pytest-benchmark", marker = "python_full_version == '3.9.*'", specifier = "==5.2.3" },
     { name = "pytest-benchmark", marker = "python_full_version >= '3.10'", specifier = "==5.3.0" },
+    { name = "pytest-run-parallel", marker = "python_full_version >= '3.14'", specifier = "==0.10.0" },
     { name = "pytest-xdist", marker = "python_full_version == '3.8.*'", specifier = "==3.6.1" },
     { name = "pytest-xdist", marker = "python_full_version >= '3.9'", specifier = "==3.8.0" },
     { name = "ruff", specifier = ">=0.17.0" },
@@ -199,9 +205,10 @@ name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
     "python_full_version == '3.9.*'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
@@ -226,9 +233,10 @@ name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
     "python_full_version == '3.9.*'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
@@ -309,9 +317,10 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
 ]
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -364,9 +373,10 @@ name = "pytest-benchmark"
 version = "5.3.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
 ]
 dependencies = [
     { name = "py-cpuinfo2" },
@@ -418,6 +428,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-run-parallel"
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest", version = "9.1.1", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/07/88/090a2113eec19240cfcf4ab61e02a88f1d8e9cf20cb7cd489fa2cfc625c2/pytest_run_parallel-0.10.0.tar.gz", hash = "sha256:25e5f9fb90fa15e4ee56537a2f4a3fca12ef0e9b524fa4a4d3ebb728b3161408", size = 66386, upload-time = "2026-08-04T16:14:21.571Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/46/b22fd3dd6ea72efe88766ce734ba81536f56198de979f75cb0a5b463c2c5/pytest_run_parallel-0.10.0-py3-none-any.whl", hash = "sha256:712e96f4dac3e7dc14eff747ffba4180030db11ff22fd62513d9cf81289a1681", size = 19612, upload-time = "2026-08-04T16:14:20.291Z" },
+]
+
+[[package]]
 name = "pytest-xdist"
 version = "3.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -438,9 +460,10 @@ name = "pytest-xdist"
 version = "3.8.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
     "python_full_version == '3.15.*' and implementation_name == 'cpython'",
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version == '3.14.*' and implementation_name == 'cpython'",
+    "(python_full_version >= '3.14' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
     "python_full_version == '3.9.*'",
 ]
 dependencies = [
@@ -580,7 +603,7 @@ name = "typing-extensions"
 version = "4.16.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "(python_full_version >= '3.10' and python_full_version < '3.14') or (python_full_version >= '3.10' and implementation_name != 'cpython') or (python_full_version >= '3.16' and implementation_name == 'cpython')",
+    "python_full_version >= '3.10' and python_full_version < '3.14'",
     "python_full_version == '3.9.*'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz", hash = "sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5", size = 113555, upload-time = "2026-07-02T08:40:05.92Z" }

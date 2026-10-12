@@ -10,7 +10,7 @@ pub use ser::encode_cid;
 use pyo3::prelude::*;
 use pyo3::types::*;
 
-use crate::convert::extract_bytes;
+use crate::convert::with_bytes;
 use crate::error::value_error;
 
 // `Cid::try_from` parses two varints + a multihash on every call; this O(1)
@@ -75,18 +75,17 @@ pub(crate) fn parse_cid_prefix(bytes: &[u8]) -> Option<(usize, u64)> {
 }
 
 pub(crate) fn extract_cid(data: &Bound<PyAny>) -> PyResult<::cid::Cid> {
-    let cid = if let Ok(s) = data.cast::<PyString>() {
-        ::cid::Cid::try_from(s.to_str()?)
+    if let Ok(s) = data.cast::<PyString>() {
+        parse_cid(s.to_str()?)
     } else {
-        ::cid::Cid::try_from(extract_bytes(data)?)
-    };
-
-    if let Ok(cid) = cid {
-        Ok(cid)
-    } else {
-        Err(value_error(
-            "Failed to decode CID",
-            cid.unwrap_err().to_string(),
-        ))
+        with_bytes(data, |b| parse_cid(b))
     }
+}
+
+#[inline]
+fn parse_cid<T>(data: T) -> PyResult<::cid::Cid>
+where
+    ::cid::Cid: TryFrom<T, Error = ::cid::Error>,
+{
+    ::cid::Cid::try_from(data).map_err(|e| value_error("Failed to decode CID", e.to_string()))
 }
