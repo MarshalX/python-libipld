@@ -21,7 +21,7 @@ pub(crate) fn from_bytes<'py>(py: Python<'py>, bytes: &[u8]) -> PyResult<Bound<'
         }
 
         let data = obj.cast::<ffi::PyASCIIObject>().offset(1).cast::<u8>();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len());
+        crate::io::short::copy_short(bytes.as_ptr(), data, bytes.len());
         *data.add(bytes.len()) = 0;
 
         Ok(Bound::from_owned_ptr(py, obj).cast_into_unchecked::<PyString>())

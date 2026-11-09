@@ -3,6 +3,7 @@
 
 pub(crate) mod leb128;
 pub(crate) mod reader;
+pub(crate) mod short;
 pub(crate) mod writer;
 
 pub(crate) use reader::{peek_one, SliceReader};

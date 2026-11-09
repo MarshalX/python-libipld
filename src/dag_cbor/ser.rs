@@ -1,34 +1,22 @@
 use std::cell::Cell;
 
 use anyhow::{anyhow, Result};
-use cbor4ii::core::{
-    enc::{self, Encode},
-    types,
-};
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::{ffi, prelude::*, types::*, Borrowed};
 
 use crate::cid::{looks_like_cid, parse_cid_prefix};
 use crate::error::{pending_or_value_error, recursion_error};
 use crate::ffi::recursion::current_recursion_limit;
+use crate::io::writer::{ARRAY, BYTES, MAP, NEGATIVE, STRING, TAG, UNSIGNED};
 use crate::io::VecWriter;
-
-struct PrefixedCidBytes<'a>(&'a [u8]);
-
-impl<'a> Encode for PrefixedCidBytes<'a> {
-    fn encode<W: enc::Write>(&self, w: &mut W) -> Result<(), enc::Error<W::Error>> {
-        // length prefix for bytes: 1 (leading 0) + payload
-        types::Bytes::bounded(1 + self.0.len(), w)?;
-        w.push(&[0x00])?;
-        w.push(self.0)?;
-        Ok(())
-    }
-}
 
 #[derive(Clone, Copy)]
 struct MapEntry {
     key: *const u8,
     key_len: usize,
+    // First 8 key bytes as a big-endian integer (zero-padded), so sorting
+    // rarely has to read the key itself.
+    prefix: u64,
     value: *mut ffi::PyObject,
     #[cfg(Py_GIL_DISABLED)]
     key_obj: *mut ffi::PyObject,
@@ -38,6 +26,25 @@ impl MapEntry {
     #[inline]
     fn key(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.key, self.key_len) }
+    }
+
+    // DAG-CBOR map order: shorter keys first, then bytewise.
+    #[inline]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.key_len, self.prefix)
+            .cmp(&(other.key_len, other.prefix))
+            .then_with(|| self.key().cmp(other.key()))
+    }
+}
+
+#[inline]
+fn key_prefix(key: &[u8]) -> u64 {
+    match key.first_chunk::<8>() {
+        Some(chunk) => u64::from_be_bytes(*chunk),
+        None => key
+            .iter()
+            .enumerate()
+            .fold(0, |prefix, (i, &b)| prefix | (b as u64) << (56 - 8 * i)),
     }
 }
 
@@ -105,17 +112,14 @@ fn list_item<'py>(l: &Bound<'py, PyList>, i: usize) -> Result<Bound<'py, PyAny>>
 }
 
 #[inline]
-fn encode_int<W: enc::Write>(obj: &Bound<'_, PyAny>, w: &mut W) -> Result<()>
-where
-    W::Error: Send + Sync,
-{
+fn encode_int(obj: &Bound<'_, PyAny>, w: &mut VecWriter) -> Result<()> {
     #[cfg(all(CPython, Py_3_12))]
     {
         if let Some((abs_val, neg)) = unsafe { crate::ffi::int::pylong_parts(obj.as_ptr()) } {
             if neg {
-                types::Negative(abs_val - 1).encode(w)?;
+                w.head(NEGATIVE, abs_val - 1);
             } else {
-                abs_val.encode(w)?;
+                w.head(UNSIGNED, abs_val);
             }
             return Ok(());
         }
@@ -126,12 +130,12 @@ where
         if -(i + 1) > u64::MAX as i128 {
             return Err(anyhow!("Number out of range"));
         }
-        types::Negative(-(i + 1) as u64).encode(w)?;
+        w.head(NEGATIVE, -(i + 1) as u64);
     } else {
         if i > u64::MAX as i128 {
             return Err(anyhow!("Number out of range"));
         }
-        (i as u64).encode(w)?;
+        w.head(UNSIGNED, i as u64);
     }
     Ok(())
 }
@@ -156,9 +160,11 @@ fn collect_map_entries(py: Python<'_>, map: &Bound<'_, PyDict>, enc: &mut Encode
                     ffi::Py_INCREF(key);
                     ffi::Py_INCREF(value);
                 }
+                let key_bytes = std::slice::from_raw_parts(utf8.cast::<u8>(), len as usize);
                 enc.entries.0.push(MapEntry {
-                    key: utf8.cast(),
-                    key_len: len as usize,
+                    key: key_bytes.as_ptr(),
+                    key_len: key_bytes.len(),
+                    prefix: key_prefix(key_bytes),
                     value,
                     #[cfg(Py_GIL_DISABLED)]
                     key_obj: key,
@@ -180,21 +186,14 @@ fn encode_map_entries<'py>(
     let entries = &mut enc.entries.0[base..];
     if entries.len() >= 2 {
         // Keys are unique, so stability buys nothing.
-        entries.sort_unstable_by(|a, b| {
-            if a.key_len != b.key_len {
-                a.key_len.cmp(&b.key_len)
-            } else {
-                a.key().cmp(b.key())
-            }
-        });
+        entries.sort_unstable_by(MapEntry::cmp);
     }
 
     let len = entries.len();
-    types::Map::bounded(len, &mut enc.w)?;
+    enc.w.head(MAP, len as u64);
     for i in base..base + len {
         let entry = enc.entries.0[i];
-        // CPython hands out the UTF-8 buffer of a valid `str`.
-        unsafe { std::str::from_utf8_unchecked(entry.key()) }.encode(&mut enc.w)?;
+        enc.w.segment(STRING, entry.key());
         let value = unsafe { Borrowed::from_ptr(py, entry.value) };
         encode_value(py, &value, enc)?;
     }
@@ -227,7 +226,7 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
     unsafe {
         if tp == &raw mut ffi::PyUnicode_Type {
             let s = obj.cast_unchecked::<PyString>();
-            s.to_str()?.encode(&mut enc.w)?;
+            enc.w.segment(STRING, s.to_str()?.as_bytes());
             return Ok(());
         }
         if tp == &raw mut ffi::PyDict_Type {
@@ -243,11 +242,11 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
             return encode_bytes(obj.cast_unchecked::<PyBytes>(), &mut enc.w);
         }
         if tp == &raw mut ffi::PyBool_Type {
-            (obj.as_ptr() == ffi::Py_True()).encode(&mut enc.w)?;
+            enc.w.bool(obj.as_ptr() == ffi::Py_True());
             return Ok(());
         }
         if obj.as_ptr() == ffi::Py_None() {
-            types::Null.encode(&mut enc.w)?;
+            enc.w.null();
             return Ok(());
         }
         if tp == &raw mut ffi::PyFloat_Type {
@@ -262,7 +261,7 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
 fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) -> Result<()> {
     enc.enter(py)?;
     let len = l.len();
-    types::Array::bounded(len, &mut enc.w)?;
+    enc.w.head(ARRAY, len as u64);
     for i in 0..len {
         #[cfg(not(Py_GIL_DISABLED))]
         let item = unsafe { list_item(l, i) };
@@ -275,32 +274,29 @@ fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) 
 }
 
 #[inline]
-fn encode_bytes<W: enc::Write>(b: &Bound<'_, PyBytes>, w: &mut W) -> Result<()>
-where
-    W::Error: Send + Sync,
-{
+fn encode_bytes(b: &Bound<'_, PyBytes>, w: &mut VecWriter) -> Result<()> {
     let bytes = b.as_bytes();
     if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
-        // by providing custom encoding we avoid extra allocation
-        types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
+        // Tag 42 around a byte string holding 0x00 followed by the CID.
+        w.head(TAG, 42);
+        w.head(BYTES, 1 + bytes.len() as u64);
+        w.raw(&[0x00]);
+        w.raw(bytes);
     } else {
-        types::Bytes(bytes).encode(w)?;
+        w.segment(BYTES, bytes);
     }
     Ok(())
 }
 
 #[inline]
-fn encode_float<W: enc::Write>(f: &Bound<'_, PyFloat>, w: &mut W) -> Result<()>
-where
-    W::Error: Send + Sync,
-{
+fn encode_float(f: &Bound<'_, PyFloat>, w: &mut VecWriter) -> Result<()> {
     let v = f.value();
     if !v.is_finite() {
         return Err(anyhow!("Number out of range"));
     }
     // DAG-CBOR forbids -0.0; it equals 0.0, so encode it as 0.0.
     let v = if v == 0.0 { 0.0 } else { v };
-    v.encode(w)?;
+    w.f64(v);
     Ok(())
 }
 
@@ -309,7 +305,7 @@ where
 #[inline(never)]
 fn encode_subclass<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder) -> Result<()> {
     if obj.is_instance_of::<PyBool>() {
-        (obj.as_ptr() == unsafe { ffi::Py_True() }).encode(&mut enc.w)?;
+        enc.w.bool(obj.as_ptr() == unsafe { ffi::Py_True() });
         Ok(())
     } else if obj.is_instance_of::<PyInt>() {
         encode_int(obj, &mut enc.w)
@@ -318,7 +314,7 @@ fn encode_subclass<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Enco
     } else if let Ok(map) = obj.cast::<PyDict>() {
         encode_map(py, map, enc)
     } else if let Ok(s) = obj.cast::<PyString>() {
-        s.to_str()?.encode(&mut enc.w)?;
+        enc.w.segment(STRING, s.to_str()?.as_bytes());
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
         encode_bytes(b, &mut enc.w)

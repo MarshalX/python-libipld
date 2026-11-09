@@ -1,4 +1,4 @@
-//! Direct-mapped intern cache for short map keys. atproto-shape payloads
+//! Two-way intern cache for short map keys. atproto-shape payloads
 //! reuse a small vocabulary (`$type`, `did`, `cid`, `uri`, `text`, ...) per
 //! record; caching the constructed `PyUnicode`, hash already computed and
 //! stored inside it, skips both the rebuild and the rehash on dict insert.
@@ -9,6 +9,7 @@ mod cached {
     use pyo3::{ffi, prelude::*};
 
     use crate::ffi::string::from_bytes;
+    use crate::io::short::eq_short;
 
     const CAP: usize = 2048;
     const MAX_KEY_LEN: usize = 64;
@@ -31,14 +32,24 @@ mod cached {
 
     static mut SLOTS: [Entry; CAP] = [const { Entry::empty() }; CAP];
 
+    // Hashes the length plus the first and last (up to) 8 bytes. Longer keys
+    // differing only in the middle share a slot: more evictions, same result.
     #[inline]
-    fn fx_hash(bytes: &[u8]) -> usize {
-        const K: u64 = 0x517c_c1b7_2722_0a95;
-        let mut h: u64 = 0;
-        for &b in bytes {
-            h = (h.rotate_left(5) ^ b as u64).wrapping_mul(K);
-        }
-        h as usize
+    fn slot_index(bytes: &[u8]) -> usize {
+        const K: u64 = 0x9e37_79b9_7f4a_7c15;
+        let (head, tail) = match (bytes.first_chunk::<8>(), bytes.last_chunk::<8>()) {
+            (Some(head), Some(tail)) => (u64::from_le_bytes(*head), u64::from_le_bytes(*tail)),
+            _ => match (bytes.first_chunk::<4>(), bytes.last_chunk::<4>()) {
+                (Some(head), Some(tail)) => (
+                    u32::from_le_bytes(*head) as u64,
+                    u32::from_le_bytes(*tail) as u64,
+                ),
+                _ => (bytes.iter().fold(0, |acc, &b| (acc << 8) | b as u64), 0),
+            },
+        };
+        let len = bytes.len() as u64;
+        let hash = ((head ^ len.wrapping_mul(K)).wrapping_mul(K) ^ tail).wrapping_mul(K);
+        (hash >> (64 - CAP.trailing_zeros())) as usize
     }
 
     /// Returns a strong-ref `PyUnicode*`; the caller owns one ref.
@@ -49,23 +60,29 @@ mod cached {
             return build(py, bytes);
         }
 
-        let slot_idx = fx_hash(bytes) & (CAP - 1);
-        // `&raw mut` is the supported path to a `static mut`; the explicit
-        // re-borrow keeps the field accesses readable. Clippy's `deref_addrof`
-        // suggestion would re-introduce `static_mut_refs`.
-        #[allow(clippy::deref_addrof)]
-        let slot = &mut *(&raw mut SLOTS[slot_idx]);
-
-        if slot.len as usize == bytes.len()
-            && !slot.obj.is_null()
-            && slot.bytes[..bytes.len()] == *bytes
-        {
-            ffi::Py_INCREF(slot.obj);
-            return Ok(slot.obj);
+        // A key lives in one of two adjacent slots, so two hot keys that hash
+        // alike don't keep evicting each other.
+        let idx = slot_index(bytes);
+        let first = &raw mut SLOTS[idx];
+        let second = &raw mut SLOTS[idx ^ 1];
+        for slot in [first, second] {
+            let slot = &*slot;
+            if !slot.obj.is_null()
+                && slot.len as usize == bytes.len()
+                && eq_short(&slot.bytes[..bytes.len()], bytes)
+            {
+                ffi::Py_INCREF(slot.obj);
+                return Ok(slot.obj);
+            }
         }
 
         let obj = build(py, bytes)?;
-        // Evict the previous occupant before claiming the slot.
+        // Prefer an empty slot; otherwise evict the first.
+        let slot = if !(*first).obj.is_null() && (*second).obj.is_null() {
+            &mut *second
+        } else {
+            &mut *first
+        };
         if !slot.obj.is_null() {
             ffi::Py_DECREF(slot.obj);
         }
