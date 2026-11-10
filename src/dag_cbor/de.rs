@@ -13,15 +13,22 @@ use crate::ffi::recursion::current_recursion_limit;
 use crate::ffi::string::from_bytes;
 use crate::io::{peek_one, SliceReader};
 
-fn map_key_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-    /* The keys in every map must be sorted length-first by the byte representation of the string keys, where:
-    - If two keys have different lengths, the shorter one sorts earlier;
-    - If two keys have the same length, the one with the lower value in (byte-wise) lexical order sorts earlier.
-     */
+// DAG-CBOR map key order: shorter keys first, same-length keys bytewise.
+// Equal keys are not "less", so duplicates are rejected too.
+#[inline]
+fn map_key_less(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
-        a.len().cmp(&b.len())
-    } else {
-        a.cmp(b)
+        return a.len() < b.len();
+    }
+    match (a.first_chunk::<8>(), b.first_chunk::<8>()) {
+        // Big-endian integers order the same way as the bytes they hold.
+        (Some(x), Some(y)) if x != y => u64::from_be_bytes(*x) < u64::from_be_bytes(*y),
+        (Some(_), Some(_)) => a[8..] < b[8..],
+        _ => a
+            .iter()
+            .zip(b)
+            .find(|(x, y)| x != y)
+            .is_some_and(|(x, y)| x < y),
     }
 }
 
@@ -255,8 +262,7 @@ where
                 let key = decode_seg(r, key_byte)?;
 
                 if let Some(prev_key) = prev_key {
-                    // it cares about duplicated keys too thanks to Ordering::Equal
-                    if map_key_cmp(prev_key, key) != std::cmp::Ordering::Less {
+                    if !map_key_less(prev_key, key) {
                         return Err(anyhow!("Map keys must be sorted and unique"));
                     }
                 }

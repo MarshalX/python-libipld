@@ -363,3 +363,110 @@ def test_dag_cbor_decode_error_mid_array() -> None:
     # 83010263616263 - [1, 2, "abc"] truncated after the second element's header
     with pytest.raises(ValueError):
         libipld.decode_dag_cbor(bytes.fromhex('8301026361'))
+
+
+@pytest.mark.parametrize('length', [*range(70), 255, 256, 257, 65535, 65536, 65537])
+def test_dag_cbor_roundtrip_string_and_bytes_lengths(length) -> None:
+    text = ('abcdefghij' * (length // 10 + 1))[:length]
+    obj = {'b': text.encode(), 's': text, text: length, 'l': [0] * min(length, 300)}
+
+    encoded = libipld.encode_dag_cbor(obj)
+    assert obj == libipld.decode_dag_cbor(encoded)
+
+    if length < 24:
+        head = bytes([0x60 | length])
+    elif length < 256:
+        head = bytes([0x78, length])
+    elif length < 65536:
+        head = b'\x79' + length.to_bytes(2, 'big')
+    else:
+        head = b'\x7a' + length.to_bytes(4, 'big')
+    assert libipld.encode_dag_cbor(text) == head + text.encode()
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        (0, '00'),
+        (23, '17'),
+        (24, '1818'),
+        (255, '18ff'),
+        (256, '190100'),
+        (65535, '19ffff'),
+        (65536, '1a00010000'),
+        (2**32 - 1, '1affffffff'),
+        (2**32, '1b0000000100000000'),
+        (2**64 - 1, '1bffffffffffffffff'),
+        (-1, '20'),
+        (-24, '37'),
+        (-25, '3818'),
+        (-(2**64), '3bffffffffffffffff'),
+        (1.5, 'fb3ff8000000000000'),
+        (True, 'f5'),
+        (False, 'f4'),
+        (None, 'f6'),
+        (b'\x01\x02', '420102'),
+        ([], '80'),
+        ({}, 'a0'),
+    ],
+)
+def test_dag_cbor_encode_canonical_heads(value, expected) -> None:
+    encoded = libipld.encode_dag_cbor(value)
+    assert encoded.hex() == expected
+    assert libipld.decode_dag_cbor(encoded) == value
+
+
+def test_dag_cbor_encode_map_key_order() -> None:
+    keys = [
+        '',
+        'b',
+        'a',
+        'zz',
+        'aaaaaaaa',
+        'aaaaaaab',
+        'aaaaaaaaa',
+        'aaaaaaaab',
+        'baaaaaaaa',
+        'aaaaaaaa\x00',
+        'prefix__0002',
+        'prefix__0001',
+        'prefix__0003',
+        'é',
+        'zé',
+        'ab',
+        '\x7f',
+        'Ā',
+    ]
+    expected = sorted(keys, key=lambda k: (len(k.encode()), k.encode()))
+
+    for ordering in (keys, keys[::-1], expected):
+        encoded = libipld.encode_dag_cbor({k: i for i, k in enumerate(ordering)})
+        # decode rejects unsorted keys and keeps their order
+        assert list(libipld.decode_dag_cbor(encoded)) == expected
+
+
+def test_dag_cbor_decode_many_distinct_keys() -> None:
+    # more distinct keys than the key cache holds
+    obj = [{f'key{i}': i, f'k{i}': None} for i in range(6000)]
+    encoded = libipld.encode_dag_cbor(obj)
+
+    assert libipld.decode_dag_cbor(encoded) == obj
+    assert libipld.decode_dag_cbor(encoded) == obj
+
+
+def test_dag_cbor_cid_roundtrip_shapes() -> None:
+    cids = [
+        bytes.fromhex('01711220') + bytes(range(32)),  # v1 dag-cbor sha2-256
+        bytes.fromhex('01551220') + bytes(range(32)),  # v1 raw sha2-256
+        bytes.fromhex('01701340') + bytes(range(64)),  # v1 dag-pb sha2-512
+        bytes.fromhex('0171000401020304'),  # v1 identity, 4-byte digest
+        bytes.fromhex('1220') + bytes(range(32)),  # v0
+    ]
+    for cid in cids:
+        encoded = libipld.encode_dag_cbor({'c': cid})
+        assert encoded[3:5] == b'\xd8\x2a'  # tag 42
+        assert libipld.decode_dag_cbor(encoded) == {'c': cid}
+
+    # truncated digest: plain bytes, not a CID
+    not_cid = bytes.fromhex('01711220') + bytes(31)
+    assert libipld.encode_dag_cbor(not_cid)[0] == 0x58

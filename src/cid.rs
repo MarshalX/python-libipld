@@ -52,6 +52,12 @@ fn read_varint(bytes: &[u8], pos: &mut usize) -> Option<u64> {
 /// construction and its 64-byte digest copy.
 #[inline]
 pub(crate) fn parse_cid_prefix(bytes: &[u8]) -> Option<(usize, u64)> {
+    // Fast path: CIDv1 with single-byte codec, hash code and digest size.
+    if let [1, codec @ ..=0x7f, ..=0x7f, size @ ..=64, ..] = *bytes {
+        let end = 4 + size as usize;
+        return (bytes.len() >= end).then_some((end, codec as u64));
+    }
+
     let mut pos = 0;
     let version = read_varint(bytes, &mut pos)?;
     let codec = read_varint(bytes, &mut pos)?;
