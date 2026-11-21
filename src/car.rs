@@ -5,7 +5,7 @@ use cbor4ii::core::dec::Read;
 use pyo3::prelude::*;
 use pyo3::types::*;
 
-use crate::cid::parse_cid_prefix;
+use crate::cid::{cid_error, is_canonical_cid, parse_cid_prefix, Cid};
 use crate::dag_cbor::de::to_pyobject;
 use crate::error::value_error;
 use crate::ffi::recursion::current_recursion_limit;
@@ -23,7 +23,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             "Invalid uvarint".to_string(),
         ));
     }
-    let Ok(header_obj) = to_pyobject(py, buf, 0, max_depth) else {
+    let Ok(header_obj) = to_pyobject::<_, false>(py, buf, max_depth) else {
         return Err(value_error(
             "Failed to read CAR header",
             "Invalid DAG-CBOR".to_string(),
@@ -87,6 +87,13 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
                 "Invalid CID".to_string(),
             ));
         };
+        let cid_raw = &cid_bytes_before[..consumed];
+        if !is_canonical_cid(cid_raw) {
+            return Err(value_error(
+                "Failed to read CID of block",
+                cid_error(cid_raw).to_string(),
+            ));
+        }
 
         if codec != 0x71 {
             return Err(value_error(
@@ -96,9 +103,8 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
         }
 
         buf.advance(consumed);
-        let cid_raw = &cid_bytes_before[..consumed];
 
-        let block_result = to_pyobject(py, buf, 0, max_depth);
+        let block_result = to_pyobject::<_, false>(py, buf, max_depth);
         let Ok(block) = block_result else {
             return Err(value_error(
                 "Failed to read CAR block",
@@ -106,8 +112,7 @@ pub fn decode_car<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(Py<PyAny>, Bou
             ));
         };
 
-        let key = PyBytes::new(py, cid_raw).into_pyobject(py)?;
-        parsed_blocks.set_item(key, block)?;
+        parsed_blocks.set_item(Cid::from_valid(py, cid_raw)?, block)?;
     }
 
     Ok((header_obj, parsed_blocks))

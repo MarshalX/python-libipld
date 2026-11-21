@@ -6,6 +6,13 @@ import urllib.request
 from typing import Any
 
 
+def cbor_link(cid_hex: str) -> str:
+    """The DAG-CBOR link to a binary CID, both in hex."""
+    size = len(cid_hex) // 2 + 1
+    head = f'{0x40 + size:02x}' if size < 24 else f'58{size:02x}'
+    return f'd82a{head}00{cid_hex}'
+
+
 def load_json_data_fixtures(dir_path: str) -> list[tuple[str, Any]]:
     data = []
     for file in os.listdir(dir_path):

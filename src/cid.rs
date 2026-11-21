@@ -1,10 +1,11 @@
-//! CID (Content IDentifier) codec plus the shared CID helpers used across
-//! codecs: extraction from arbitrary Python objects and the O(1) shape check.
+//! CID (Content IDentifier) codec, the `CID` type, and the shared CID helpers.
 
 pub(crate) mod de;
+pub(crate) mod object;
 pub(crate) mod ser;
 
 pub use de::decode_cid;
+pub use object::{Cid, Multihash};
 pub use ser::encode_cid;
 
 use pyo3::prelude::*;
@@ -12,20 +13,6 @@ use pyo3::types::*;
 
 use crate::convert::with_bytes;
 use crate::error::value_error;
-
-// `Cid::try_from` parses two varints + a multihash on every call; this O(1)
-// shape check rejects payloads that can't be a CID without paying for it.
-// CIDv1 starts with `0x01`; CIDv0 is exactly 34 bytes starting `0x12 0x20`.
-#[inline]
-pub(crate) fn looks_like_cid(bytes: &[u8]) -> bool {
-    if bytes.len() < 4 {
-        return false;
-    }
-    if bytes[0] == 0x01 {
-        return true;
-    }
-    bytes.len() == 34 && bytes[0] == 0x12 && bytes[1] == 0x20
-}
 
 // Minimal-encoding unsigned varint, as `unsigned_varint::decode::u64`:
 // ≤10 bytes, last byte of a multi-byte varint must be non-zero.
@@ -74,8 +61,48 @@ pub(crate) fn parse_cid_prefix(bytes: &[u8]) -> Option<(usize, u64)> {
     (bytes.len() >= end).then_some((end, codec))
 }
 
+/// Whether `bytes` is exactly one CID, as `::cid::Cid::to_bytes` writes it.
+#[inline]
+pub(crate) fn is_canonical_cid(bytes: &[u8]) -> bool {
+    if let [1, ..=0x7f, ..=0x7f, size @ ..=64, digest @ ..] = bytes {
+        return digest.len() == *size as usize;
+    }
+    if let [0x12, 0x20, digest @ ..] = bytes {
+        return digest.len() == 32;
+    }
+    let [1, rest @ ..] = bytes else {
+        return false;
+    };
+
+    let mut pos = 0;
+    let mut hash_size = 0;
+    // codec, multihash code, digest size
+    for _ in 0..3 {
+        let start = pos;
+        let Some(value) = read_varint(rest, &mut pos) else {
+            return false;
+        };
+        if pos - start == 10 && rest[pos - 1] > 1 {
+            return false;
+        }
+        hash_size = value;
+    }
+    hash_size <= 64 && rest.len() - pos == hash_size as usize
+}
+
+#[cold]
+pub(crate) fn cid_error(bytes: &[u8]) -> &'static str {
+    match parse_cid_prefix(bytes) {
+        None => "Invalid CID",
+        Some((end, _)) if end < bytes.len() => "Invalid CID: bytes after the CID",
+        Some(_) => "Invalid CID: varint over 64 bits",
+    }
+}
+
 pub(crate) fn extract_cid(data: &Bound<PyAny>) -> PyResult<::cid::Cid> {
-    if let Ok(s) = data.cast::<PyString>() {
+    if let Ok(cid) = data.cast::<Cid>() {
+        parse_cid(cid.get().as_bytes())
+    } else if let Ok(s) = data.cast::<PyString>() {
         parse_cid(s.to_str()?)
     } else {
         with_bytes(data, |b| parse_cid(b))

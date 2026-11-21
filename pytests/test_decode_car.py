@@ -22,8 +22,9 @@ def test_decode_car(benchmark, car) -> None:
     assert 1 == len(header['roots'])
 
     assert isinstance(blocks, dict)
-    assert all(isinstance(k, bytes) for k in blocks)
-    assert all(len(k) == 36 for k in blocks)
+    assert all(isinstance(k, libipld.CID) for k in blocks)
+    assert all(len(bytes(k)) == 36 for k in blocks)
+    assert header['roots'][0] in blocks
     assert all(isinstance(v, dict) for v in blocks.values())
     assert all(v for v in blocks.values())  # not empty dict
 
@@ -122,3 +123,49 @@ def test_decode_car_invalid_block_utf8() -> None:
 
     assert str(exc_info.value).startswith('Failed to read CAR block. UnicodeDecodeError:')
     assert 'utf-8' in str(exc_info.value)
+
+
+def _car(cid: bytes, block_obj: bytes, roots=None) -> bytes:
+    if roots is None:
+        roots = [libipld.CID(bytes.fromhex('01711220') + bytes(32))]
+    header_obj = libipld.encode_dag_cbor({'version': 1, 'roots': roots})
+    block = cid + block_obj
+    return bytes([len(header_obj)]) + header_obj + bytes([len(block)]) + block
+
+
+def test_decode_car_links_are_cids() -> None:
+    cid = bytes.fromhex('01711220') + bytes(32)
+    header, blocks = libipld.decode_car(_car(cid, libipld.encode_dag_cbor({'a': libipld.CID(cid)})))
+
+    assert header['roots'] == [libipld.CID(cid)]
+    assert type(header['roots'][0]) is libipld.CID
+    assert blocks == {libipld.CID(cid): {'a': libipld.CID(cid)}}
+
+
+def test_decode_car_block_cid_with_overflowing_varint() -> None:
+    # the multihash code is a 10-byte varint over 64 bits
+    cid = bytes.fromhex('01719280808080808080800220') + bytes(32)
+
+    with pytest.raises(ValueError) as exc_info:
+        libipld.decode_car(_car(cid, libipld.encode_dag_cbor({})))
+
+    assert str(exc_info.value) == 'Failed to read CID of block. Invalid CID: varint over 64 bits'
+
+
+def test_decode_car_multiple_roots() -> None:
+    cid = bytes.fromhex('01711220') + bytes(32)
+    roots = [libipld.CID(cid), libipld.CID(bytes.fromhex('01711220') + b'\x01' * 32)]
+
+    header, blocks = libipld.decode_car(_car(cid, libipld.encode_dag_cbor({}), roots))
+
+    assert header['roots'] == roots
+    assert list(blocks) == [libipld.CID(cid)]
+
+
+@pytest.mark.parametrize('root', ['bafy', b'\x01\x71', 1])
+def test_decode_car_root_that_is_not_a_link(root) -> None:
+    cid = bytes.fromhex('01711220') + bytes(32)
+
+    header, _ = libipld.decode_car(_car(cid, libipld.encode_dag_cbor({}), [root]))
+
+    assert header['roots'] == [root]

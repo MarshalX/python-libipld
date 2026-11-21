@@ -8,6 +8,9 @@ Code snippet:
 import libipld
 
 # CID
+cid = libipld.CID('bafyreig7jbijxpn4lfhvnvyuwf5u5jyhd7begxwyiqe7ingwxycjdqjjoa')
+print(cid.version, cid.codec, bytes(cid).hex())
+# Output: 1 113 01711220df48509bbdbc594f56d714b17b4ea7071fc2435ed84409f434d6be0491c12970
 print(libipld.decode_cid('bafyreig7jbijxpn4lfhvnvyuwf5u5jyhd7begxwyiqe7ingwxycjdqjjoa'))
 # Output: {'hash': {'size': 32, 'code': 18, 'digest': b'\xdfHP\x9b\xbd\xbcYOV\xd7\x14\xb1{N\xa7\x07\x1f\xc2C^\xd8D\t\xf44\xd6\xbe\x04\x91\xc1)p'}, 'version': 1, 'codec': 113}
 print(libipld.encode_cid(bytes.fromhex('01711220b6811a1d7f8c1791da6d1b4f136dc0e22679eafeaa58d64d7e2faad5890e9d9c')))
@@ -18,6 +21,8 @@ print(libipld.decode_dag_cbor(b'\xa2aa\x0cabfhello!'))
 # Output: {'a': 12, 'b': 'hello!'}
 print(libipld.encode_dag_cbor({'a': 12, 'b': 'hello!'}))
 # Output: b'\xa2aa\x0cabfhello!'
+print(libipld.decode_dag_cbor(libipld.encode_dag_cbor({'link': cid})))
+# Output: {'link': CID('bafyreig7jbijxpn4lfhvnvyuwf5u5jyhd7begxwyiqe7ingwxycjdqjjoa')}
 
 # multibase
 print(libipld.decode_multibase('ueWVzIG1hbmkgIQ'))
@@ -29,12 +34,13 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 ### Features
 
 #### 🔗 CID (Content Identifier) Operations
-- **`decode_cid(data: str | bytes) -> dict[str, Any]`** - Decode CIDs from string representation (e.g., `'bafy...'`) or raw bytes into structured data containing version, codec, and hash information
-- **`encode_cid(data: str | bytes) -> str`** - Encode CID raw bytes to string representation, or return string CIDs as-is
+- **`CID(data: str | bytes)`** - Immutable CID from its string or binary form, with `version`, `codec`, `hash`, `str(cid)` and `bytes(cid)`
+- **`decode_cid(data: str | bytes | CID) -> dict[str, Any]`** - Decode CIDs from string representation (e.g., `'bafy...'`) or raw bytes into structured data containing version, codec, and hash information
+- **`encode_cid(data: str | bytes | CID) -> str`** - Encode CID raw bytes to string representation, or return string CIDs as-is
 
 #### 📦 DAG-CBOR (Directed Acyclic Graph CBOR) Operations  
-- **`decode_dag_cbor(data: bytes) -> Any`** - Decode DAG-CBOR binary data into Python objects (dicts, lists, primitives)
-- **`decode_dag_cbor_multi(data: bytes) -> list[Any]`** - Decode multiple concatenated DAG-CBOR objects from a single byte stream
+- **`decode_dag_cbor(data: bytes, *, canonical: bool = False) -> Any`** - Decode DAG-CBOR binary data into Python objects (dicts, lists, primitives, `CID` for links)
+- **`decode_dag_cbor_multi(data: bytes, *, canonical: bool = False) -> list[Any]`** - Decode multiple concatenated DAG-CBOR objects from a single byte stream
 - **`encode_dag_cbor(data: Any) -> bytes`** - Encode Python objects into DAG-CBOR binary format
 
 #### 🌐 Multibase Operations
@@ -42,7 +48,7 @@ print(libipld.encode_multibase('u', b'yes mani !'))
 - **`encode_multibase(code: str, data: str | bytes) -> str`** - Encode data using specified multibase encoding (e.g. `'u'` for base64url)
 
 #### 🚗 CAR (Content Addressable Archives) Operations
-- **`decode_car(data: bytes) -> tuple[dict[str, Any], dict[bytes, dict[str, Any]]]`** - Decode CAR files into header metadata and a mapping of CID bytes to block data
+- **`decode_car(data: bytes) -> tuple[dict[str, Any], dict[CID, dict[str, Any]]]`** - Decode CAR files into header metadata and a mapping of block CIDs to block data
 
 ### Error handling
 
@@ -64,6 +70,17 @@ except RecursionError:
 ```
 
 Passing a value of the wrong type, such as a `str` where `bytes` is expected, raises `TypeError`.
+
+### Links and canonical form
+
+Links decode to `CID`, and `encode_dag_cbor` writes a `CID` as a link and `bytes` as a byte string, so canonical data round-trips byte-exact. `canonical=True` rejects data in any other form:
+
+```python
+value = libipld.decode_dag_cbor(data, canonical=True)
+assert libipld.encode_dag_cbor(value) == data
+```
+
+A `CID` equals only another `CID`: compare with a string as `cid == libipld.CID(s)`.
 
 ### Requirements
 

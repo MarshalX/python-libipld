@@ -5,7 +5,7 @@ use cbor4ii::core::{
 };
 use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
-use crate::cid::parse_cid_prefix;
+use crate::cid::{is_canonical_cid, parse_cid_prefix, Cid};
 use crate::error::{pending_or_value_error, recursion_error, value_error};
 use crate::ffi::dict::{new_presized, set_item};
 use crate::ffi::key_cache::intern;
@@ -60,13 +60,37 @@ where
     })
 }
 
-// Definite-length bytes/string payload, zero-copy from the input.
 #[inline]
-fn decode_seg<'de, R: dec::Read<'de>>(r: &mut R, byte: u8) -> Result<&'de [u8]>
+fn decode_head<'de, R: dec::Read<'de>, const CANONICAL: bool>(r: &mut R, byte: u8) -> Result<u64>
 where
     R::Error: Send + Sync,
 {
-    let len = usize::try_from(decode_arg(r, byte)?)?;
+    let value = decode_arg(r, byte)?;
+    if CANONICAL {
+        let min = match byte & 0x1f {
+            0x18 => 24,
+            0x19 => 1 << 8,
+            0x1a => 1 << 16,
+            0x1b => 1 << 32,
+            _ => 0,
+        };
+        if value < min {
+            return Err(anyhow!("Non-minimal header argument"));
+        }
+    }
+    Ok(value)
+}
+
+// Definite-length bytes/string payload, zero-copy from the input.
+#[inline]
+fn decode_seg<'de, R: dec::Read<'de>, const CANONICAL: bool>(
+    r: &mut R,
+    byte: u8,
+) -> Result<&'de [u8]>
+where
+    R::Error: Send + Sync,
+{
+    let len = usize::try_from(decode_head::<_, CANONICAL>(r, byte)?)?;
     match r.fill(len)? {
         dec::Reference::Long(s) if s.len() >= len => {
             let s = &s[..len];
@@ -78,7 +102,7 @@ where
 }
 
 #[inline(always)]
-fn decode_value<'de, R: dec::Read<'de>>(
+fn decode_value<'de, R: dec::Read<'de>, const CANONICAL: bool>(
     py: Python,
     r: &mut R,
     byte: u8,
@@ -89,9 +113,11 @@ where
     R::Error: Send + Sync,
 {
     Ok(match dec::if_major(byte) {
-        major::UNSIGNED => decode_arg(r, byte)?.into_pyobject(py)?.into(),
+        major::UNSIGNED => decode_head::<_, CANONICAL>(r, byte)?
+            .into_pyobject(py)?
+            .into(),
         major::NEGATIVE => {
-            let v = decode_arg(r, byte)?;
+            let v = decode_head::<_, CANONICAL>(r, byte)?;
             // `-1 - v` fits an i64 for v < 2^63; the i128 fallback covers the
             // rest and costs a `_PyLong_FromByteArray`-style conversion.
             if v <= i64::MAX as u64 {
@@ -100,25 +126,28 @@ where
                 (-1i128 - v as i128).into_pyobject(py)?.into()
             }
         }
-        major::BYTES => PyBytes::new(py, decode_seg(r, byte)?)
+        major::BYTES => PyBytes::new(py, decode_seg::<_, CANONICAL>(r, byte)?)
             .into_pyobject(py)?
             .into(),
         major::STRING => {
             // ASCII fast path inside the helper; non-ASCII falls through to
             // `PyUnicode_DecodeUTF8`, which is where the spec validation lives.
-            from_bytes(py, decode_seg(r, byte)?)?.into()
+            from_bytes(py, decode_seg::<_, CANONICAL>(r, byte)?)?.into()
         }
         major::TAG => {
             let value = decode_arg(r, byte)?;
             if value != 42 {
                 return Err(anyhow!("Non-42 tags are not supported"));
             }
+            if CANONICAL && byte != 0xd8 {
+                return Err(anyhow!("Non-minimal header argument"));
+            }
 
             let content_byte = peek_one(r)?;
             if dec::if_major(content_byte) != major::BYTES {
                 return Err(anyhow!("Invalid CID"));
             }
-            let cid = decode_seg(r, content_byte)?;
+            let cid = decode_seg::<_, CANONICAL>(r, content_byte)?;
 
             // we expect CIDs to have a leading zero byte
             if cid.len() <= 1 || cid[0] != 0 {
@@ -126,13 +155,16 @@ where
             }
 
             let cid_without_prefix = &cid[1..];
-            if parse_cid_prefix(cid_without_prefix).is_none() {
-                return Err(anyhow!("Invalid CID"));
+            if !is_canonical_cid(cid_without_prefix) {
+                return Err(anyhow!(match parse_cid_prefix(cid_without_prefix) {
+                    None => "Invalid CID",
+                    Some((end, _)) if end < cid_without_prefix.len() =>
+                        "Invalid CID: bytes after the CID",
+                    Some(_) => "Invalid CID: varint over 64 bits",
+                }));
             }
 
-            PyBytes::new(py, cid_without_prefix)
-                .into_pyobject(py)?
-                .into()
+            Cid::from_valid(py, cid_without_prefix)?.into_any().unbind()
         }
         major::SIMPLE => match byte {
             // FIXME(MarshalX): should be more clear for bool?
@@ -159,6 +191,9 @@ where
                 if bits == (-0.0f32).to_bits() {
                     return Err(anyhow!("Negative zero is forbidden for f32".to_string()));
                 }
+                if CANONICAL {
+                    return Err(anyhow!("Floats must be 64-bit"));
+                }
                 value.into_pyobject(py)?.into()
             }
             marker::F64 => {
@@ -176,12 +211,12 @@ where
             }
             _ => return Err(anyhow!("Unsupported major type".to_string())),
         },
-        _ => return decode_container(py, r, byte, depth, max_depth),
+        _ => return decode_container::<_, CANONICAL>(py, r, byte, depth, max_depth),
     })
 }
 
 #[inline(never)]
-fn decode_container<'de, R: dec::Read<'de>>(
+fn decode_container<'de, R: dec::Read<'de>, const CANONICAL: bool>(
     py: Python,
     r: &mut R,
     byte: u8,
@@ -200,7 +235,7 @@ where
 
     Ok(match dec::if_major(byte) {
         major::ARRAY => {
-            let len = usize::try_from(decode_arg(r, byte)?)?;
+            let len = usize::try_from(decode_head::<_, CANONICAL>(r, byte)?)?;
             // Every element costs at least one byte; reject a claimed length
             // beyond the remaining input before allocating for it.
             if r.fill(len)?.as_ref().len() < len {
@@ -222,7 +257,8 @@ where
                     ffi::PyList_SET_ITEM(
                         ptr,
                         i,
-                        decode_value(py, r, item_byte, depth + 1, max_depth)?.into_ptr(),
+                        decode_value::<_, CANONICAL>(py, r, item_byte, depth + 1, max_depth)?
+                            .into_ptr(),
                     );
                 }
 
@@ -230,7 +266,7 @@ where
             }
         }
         major::MAP => {
-            let len = usize::try_from(decode_arg(r, byte)?)?;
+            let len = usize::try_from(decode_head::<_, CANONICAL>(r, byte)?)?;
             // Every entry costs at least two bytes (key + value); reject a
             // claimed length beyond the remaining input before presizing.
             let need = len.saturating_mul(2);
@@ -252,7 +288,7 @@ where
                 if dec::if_major(key_byte) != major::STRING {
                     return Err(anyhow!("Map keys must be strings"));
                 }
-                let key = decode_seg(r, key_byte)?;
+                let key = decode_seg::<_, CANONICAL>(r, key_byte)?;
 
                 if let Some(prev_key) = prev_key {
                     // it cares about duplicated keys too thanks to Ordering::Equal
@@ -267,7 +303,8 @@ where
                     unsafe { Bound::from_owned_ptr(py, intern(py, key)?) };
 
                 let value_byte = peek_one(r)?;
-                let value_py = decode_value(py, r, value_byte, depth + 1, max_depth)?;
+                let value_py =
+                    decode_value::<_, CANONICAL>(py, r, value_byte, depth + 1, max_depth)?;
 
                 unsafe { set_item(py, &dict, key_py.as_borrowed(), value_py)? };
             }
@@ -278,31 +315,32 @@ where
     })
 }
 
-pub(crate) fn to_pyobject<'de, R: dec::Read<'de>>(
+pub(crate) fn to_pyobject<'de, R: dec::Read<'de>, const CANONICAL: bool>(
     py: Python,
     r: &mut R,
-    depth: usize,
     max_depth: usize,
 ) -> Result<Py<PyAny>>
 where
     R::Error: Send + Sync,
 {
     let byte = peek_one(r)?;
-    decode_value(py, r, byte, depth, max_depth)
+    decode_value::<_, CANONICAL>(py, r, byte, 0, max_depth)
 }
 
 fn decode_error(py: Python, e: anyhow::Error) -> PyErr {
     pending_or_value_error(py, "Failed to decode DAG-CBOR", e)
 }
 
-#[pyfunction]
-pub fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
+fn decode_multi<'py, const CANONICAL: bool>(
+    py: Python<'py>,
+    data: &[u8],
+) -> PyResult<Bound<'py, PyList>> {
     let mut reader = SliceReader::new(data);
     let decoded_parts = PyList::empty(py);
     let max_depth = current_recursion_limit();
 
     while !reader.fill(1)?.as_ref().is_empty() {
-        match to_pyobject(py, &mut reader, 0, max_depth) {
+        match to_pyobject::<_, CANONICAL>(py, &mut reader, max_depth) {
             Ok(py_object) => decoded_parts.append(py_object)?,
             Err(e) => return Err(decode_error(py, e)),
         }
@@ -311,11 +349,10 @@ pub fn decode_dag_cbor_multi<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Boun
     Ok(decoded_parts)
 }
 
-#[pyfunction]
-pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
+fn decode_one<const CANONICAL: bool>(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
     let mut reader = SliceReader::new(data);
     let max_depth = current_recursion_limit();
-    match to_pyobject(py, &mut reader, 0, max_depth) {
+    match to_pyobject::<_, CANONICAL>(py, &mut reader, max_depth) {
         Ok(py_object) => {
             // check for any remaining data in the reader
             if reader.fill(1)?.as_ref().is_empty() {
@@ -329,4 +366,36 @@ pub fn decode_dag_cbor(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
         }
         Err(e) => Err(decode_error(py, e)),
     }
+}
+
+#[inline(never)]
+fn decode_multi_canonical<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyList>> {
+    decode_multi::<true>(py, data)
+}
+
+#[inline(never)]
+fn decode_one_canonical(py: Python, data: &[u8]) -> PyResult<Py<PyAny>> {
+    decode_one::<true>(py, data)
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, *, canonical=false))]
+pub fn decode_dag_cbor_multi<'py>(
+    py: Python<'py>,
+    data: &[u8],
+    canonical: bool,
+) -> PyResult<Bound<'py, PyList>> {
+    if canonical {
+        return decode_multi_canonical(py, data);
+    }
+    decode_multi::<false>(py, data)
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, *, canonical=false))]
+pub fn decode_dag_cbor(py: Python, data: &[u8], canonical: bool) -> PyResult<Py<PyAny>> {
+    if canonical {
+        return decode_one_canonical(py, data);
+    }
+    decode_one::<false>(py, data)
 }

@@ -6,9 +6,9 @@ use cbor4ii::core::{
     types,
 };
 use pyo3::sync::critical_section::with_critical_section;
-use pyo3::{ffi, prelude::*, types::*, Borrowed};
+use pyo3::{ffi, prelude::*, types::*, Borrowed, PyTypeInfo};
 
-use crate::cid::{looks_like_cid, parse_cid_prefix};
+use crate::cid::Cid;
 use crate::error::{pending_or_value_error, recursion_error};
 use crate::ffi::recursion::current_recursion_limit;
 use crate::io::VecWriter;
@@ -72,6 +72,7 @@ struct Encoder {
     entries: MapEntries,
     depth: usize,
     max_depth: usize,
+    cid_type: *mut ffi::PyTypeObject,
 }
 
 impl Encoder {
@@ -240,7 +241,8 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
             return encode_int(obj, &mut enc.w);
         }
         if tp == &raw mut ffi::PyBytes_Type {
-            return encode_bytes(obj.cast_unchecked::<PyBytes>(), &mut enc.w);
+            types::Bytes(obj.cast_unchecked::<PyBytes>().as_bytes()).encode(&mut enc.w)?;
+            return Ok(());
         }
         if tp == &raw mut ffi::PyBool_Type {
             (obj.as_ptr() == ffi::Py_True()).encode(&mut enc.w)?;
@@ -252,6 +254,14 @@ fn encode_value<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder
         }
         if tp == &raw mut ffi::PyFloat_Type {
             return encode_float(obj.cast_unchecked::<PyFloat>(), &mut enc.w);
+        }
+        if tp == enc.cid_type {
+            let cid = obj.cast_unchecked::<Cid>().get().as_bytes();
+            if cid.is_empty() {
+                return Err(anyhow!("Uninitialized CID"));
+            }
+            types::Tag(42, PrefixedCidBytes(cid)).encode(&mut enc.w)?;
+            return Ok(());
         }
     }
 
@@ -274,18 +284,14 @@ fn encode_list<'py>(py: Python<'py>, l: &Bound<'py, PyList>, enc: &mut Encoder) 
     Ok(())
 }
 
-#[inline]
-fn encode_bytes<W: enc::Write>(b: &Bound<'_, PyBytes>, w: &mut W) -> Result<()>
-where
-    W::Error: Send + Sync,
-{
-    let bytes = b.as_bytes();
-    if looks_like_cid(bytes) && parse_cid_prefix(bytes).is_some() {
-        // by providing custom encoding we avoid extra allocation
-        types::Tag(42, PrefixedCidBytes(bytes)).encode(w)?;
-    } else {
-        types::Bytes(bytes).encode(w)?;
+#[inline(never)]
+fn encode_tuple<'py>(py: Python<'py>, t: &Bound<'py, PyTuple>, enc: &mut Encoder) -> Result<()> {
+    enc.enter(py)?;
+    types::Array::bounded(t.len(), &mut enc.w)?;
+    for item in t.iter_borrowed() {
+        encode_value(py, &item, enc)?;
     }
+    enc.depth -= 1;
     Ok(())
 }
 
@@ -304,7 +310,7 @@ where
     Ok(())
 }
 
-// Subclasses of supported types (rare in DAG-CBOR usage).
+// Tuples and subclasses of the other supported types (rare in DAG-CBOR usage).
 #[cold]
 #[inline(never)]
 fn encode_subclass<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Encoder) -> Result<()> {
@@ -321,9 +327,12 @@ fn encode_subclass<'py>(py: Python<'py>, obj: &Bound<'py, PyAny>, enc: &mut Enco
         s.to_str()?.encode(&mut enc.w)?;
         Ok(())
     } else if let Ok(b) = obj.cast::<PyBytes>() {
-        encode_bytes(b, &mut enc.w)
+        types::Bytes(b.as_bytes()).encode(&mut enc.w)?;
+        Ok(())
     } else if let Ok(f) = obj.cast::<PyFloat>() {
         encode_float(f, &mut enc.w)
+    } else if let Ok(t) = obj.cast_exact::<PyTuple>() {
+        encode_tuple(py, t, enc)
     } else {
         Err(anyhow!("Unknown tag"))
     }
@@ -339,6 +348,7 @@ pub fn encode_dag_cbor<'py>(
         entries: MapEntries::new(),
         depth: 0,
         max_depth: current_recursion_limit(),
+        cid_type: Cid::type_object_raw(py),
     };
     if let Err(e) = encode_value(py, data, &mut enc) {
         return Err(pending_or_value_error(py, "Failed to encode DAG-CBOR", e));
