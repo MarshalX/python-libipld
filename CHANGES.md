@@ -2,7 +2,7 @@
 
 ## Version 4.0.0
 
-**XX.11.2026**
+**21.11.2026**
 
 **🔗 Native `CID` type for DAG-CBOR links**
 
