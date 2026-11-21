@@ -5,7 +5,7 @@ use cbor4ii::core::{
 };
 use pyo3::{ffi, prelude::*, types::*, BoundObject};
 
-use crate::cid::{cid_error, is_canonical_cid, Cid};
+use crate::cid::{is_canonical_cid, parse_cid_prefix, Cid};
 use crate::error::{pending_or_value_error, recursion_error, value_error};
 use crate::ffi::dict::{new_presized, set_item};
 use crate::ffi::key_cache::intern;
@@ -156,7 +156,12 @@ where
 
             let cid_without_prefix = &cid[1..];
             if !is_canonical_cid(cid_without_prefix) {
-                return Err(anyhow!(cid_error(cid_without_prefix)));
+                return Err(anyhow!(match parse_cid_prefix(cid_without_prefix) {
+                    None => "Invalid CID",
+                    Some((end, _)) if end < cid_without_prefix.len() =>
+                        "Invalid CID: bytes after the CID",
+                    Some(_) => "Invalid CID: varint over 64 bits",
+                }));
             }
 
             Cid::from_valid(py, cid_without_prefix)?.into_any().unbind()
