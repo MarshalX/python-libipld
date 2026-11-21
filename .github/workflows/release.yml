@@ -71,7 +71,7 @@ jobs:
           - os: windows
             target: aarch64
 
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: ${{ matrix.os == 'ubuntu' && 'ubuntu-24.04' || format('{0}-latest', matrix.os) }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -192,7 +192,7 @@ jobs:
           path: dist
 
   build-sdist:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Build sdist.
@@ -208,7 +208,7 @@ jobs:
 
   check:
     needs: [ build, build-pgo, build-sdist ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v6
@@ -236,7 +236,7 @@ jobs:
 
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [ build, build-pgo, build-sdist, check ]
     environment:
