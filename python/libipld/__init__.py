@@ -1,4 +1,6 @@
 from ._libipld import (
+    CID,
+    Multihash,
     decode_car,
     decode_cid,
     decode_dag_cbor,
@@ -10,6 +12,8 @@ from ._libipld import (
 )
 
 __all__ = [
+    'CID',
+    'Multihash',
     'decode_car',
     'decode_cid',
     'decode_dag_cbor',

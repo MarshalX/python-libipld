@@ -43,7 +43,7 @@ mod cached {
 
     /// Returns a strong-ref `PyUnicode*`; the caller owns one ref.
     /// Caller must hold the GIL (we are always called from a `Python<'_>`).
-    #[inline]
+    #[inline(always)]
     pub(crate) unsafe fn intern(py: Python<'_>, bytes: &[u8]) -> PyResult<*mut ffi::PyObject> {
         if bytes.len() > MAX_KEY_LEN {
             return build(py, bytes);

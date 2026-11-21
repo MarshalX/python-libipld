@@ -17,6 +17,9 @@ pub use multibase::{decode_multibase, encode_multibase};
 #[pymodule]
 #[pyo3(name = "_libipld")]
 fn libipld(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<cid::Cid>()?;
+    m.add_class::<cid::Multihash>()?;
+
     m.add_function(wrap_pyfunction!(cid::decode_cid, m)?)?;
     m.add_function(wrap_pyfunction!(cid::encode_cid, m)?)?;
 

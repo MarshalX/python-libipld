@@ -30,11 +30,11 @@ def _dag_cbor_decode(benchmark, data) -> None:
     benchmark(libipld.decode_dag_cbor, dag_cbor)
 
 
-def _dag_cbor_roundtrip(benchmark, data) -> None:
+def _dag_cbor_roundtrip(benchmark, data, **kwargs) -> None:
     _, obj = data
 
     encoded = libipld.encode_dag_cbor(obj)
-    decoded = benchmark(libipld.decode_dag_cbor, encoded)
+    decoded = benchmark(libipld.decode_dag_cbor, encoded, **kwargs)
 
     assert obj == decoded, f'{obj} != {decoded}'
 
@@ -103,6 +103,11 @@ def test_dag_cbor_decode(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
 
 
+@pytest.mark.parametrize('data', load_json_data_fixtures(_ROUNDTRIP_DATA_DIR), ids=lambda data: data[0])
+def test_dag_cbor_decode_canonical(benchmark, data) -> None:
+    _dag_cbor_roundtrip(benchmark, data, canonical=True)
+
+
 @pytest.mark.benchmark_main
 @pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_encode_real_data(benchmark, data) -> None:
@@ -115,6 +120,12 @@ def test_dag_cbor_decode_real_data(benchmark, data) -> None:
     _dag_cbor_roundtrip(benchmark, data)
 
 
+@pytest.mark.benchmark_main
+@pytest.mark.parametrize('data', load_json_data_fixtures(_REAL_DATA_DIR), ids=lambda data: data[0])
+def test_dag_cbor_decode_canonical_real_data(benchmark, data) -> None:
+    _dag_cbor_roundtrip(benchmark, data, canonical=True)
+
+
 @pytest.mark.parametrize('data', load_cbor_data_fixtures(_FIXTURES_DATA_DIR), ids=lambda data: data[0])
 def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
     _dag_cbor_decode(benchmark, data)
@@ -124,6 +135,16 @@ def test_dag_cbor_decode_fixtures(benchmark, data) -> None:
 def test_dag_cbor_decode_torture_cids(benchmark) -> None:
     dag_cbor = Path(_TORTURE_CIDS_DAG_CBOR_PATH).read_bytes()
     benchmark(libipld.decode_dag_cbor, dag_cbor)
+
+
+@pytest.mark.benchmark_main
+def test_dag_cbor_encode_torture_cids(benchmark) -> None:
+    dag_cbor = Path(_TORTURE_CIDS_DAG_CBOR_PATH).read_bytes()
+    decoded = libipld.decode_dag_cbor(dag_cbor)
+
+    encoded = benchmark(libipld.encode_dag_cbor, decoded)
+
+    assert encoded == dag_cbor
 
 
 def test_recursion_limit_exceed_on_nested_lists() -> None:

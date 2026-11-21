@@ -1,5 +1,35 @@
 # Change Log
 
+## Version 4.0.0
+
+**XX.11.2026**
+
+**🔗 Native `CID` type for DAG-CBOR links**
+
+**❗ Breaking changes**
+
+* Decode links to `CID` instead of `bytes`, including CAR roots and block keys by [@MarshalX](https://github.com/MarshalX)
+* Encode `bytes` always as a byte string, never as a link by [@MarshalX](https://github.com/MarshalX)
+* Reject links and CAR block CIDs that are not exactly one CID by [@MarshalX](https://github.com/MarshalX)
+
+**🆕 Features**
+
+* Add the `CID` type, equal and hashed by its bytes by [@MarshalX](https://github.com/MarshalX)
+* Add `canonical=True` to `decode_dag_cbor` and `decode_dag_cbor_multi` by [@MarshalX](https://github.com/MarshalX)
+* Encode a `tuple` (not a subclass) as an array by [@MarshalX](https://github.com/MarshalX)
+* Accept `CID` in `decode_cid` and `encode_cid` by [@MarshalX](https://github.com/MarshalX)
+
+**🧭 Migration from 3.x**
+
+```python
+cid = libipld.decode_dag_cbor(data)['link']  # was bytes
+bytes(cid)  # the old value; use it for len(), slicing, .hex(), sorting
+str(cid)  # was libipld.encode_cid(cid_bytes)
+libipld.encode_dag_cbor({'link': libipld.CID(cid_bytes)})  # bytes no longer become a link
+blocks[libipld.CID('bafy...')]  # CAR block keys are CID
+cid == libipld.CID(s)  # a CID never equals a str
+```
+
 ## Version 3.5.0
 
 **12.10.2026**

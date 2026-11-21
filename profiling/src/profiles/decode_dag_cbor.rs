@@ -12,7 +12,10 @@ pub fn exec(iterations: u64) {
 
     for _ in 0..iterations {
         Python::attach(|gil| {
-            println!("{}", libipld::decode_dag_cbor(gil, &dag_cbor_bytes).is_ok());
+            println!(
+                "{}",
+                libipld::decode_dag_cbor(gil, &dag_cbor_bytes, false).is_ok()
+            );
         });
     }
 }
